@@ -158,10 +158,21 @@ def test_compute_series_scores_the_sample_against_the_optimum(sample):
 
 
 def test_compute_series_labels_axes_with_integer_counts(sample):
-    """#Variables (#Interdicted Edges), not '16.0 (1.0)'."""
-    x_labels, _, _ = plot.compute_series(sample, ['SA'])
-    assert x_labels[0] == '16 (1)'
-    assert len(x_labels) == len(sample)
+    """
+    #Variables (#Interdicted Edges), not '16.0 (1.0)'.
+
+    Checked on a CSV carrying only the columns the plot itself reads, as well
+    as on the sample: a row-wise read of the sample survives because its
+    string `instance` column forces object dtype, while an all-numeric frame
+    (any CSV predating that column) upcasts the counts to float.
+    """
+    numeric_only = sample[list(rb.PLOT_COLUMNS)]
+    assert numeric_only.dtypes.map(pandas.api.types.is_numeric_dtype).all()
+
+    for frame in (sample, numeric_only):
+        x_labels, _, _ = plot.compute_series(frame, ['SA'])
+        assert x_labels[0] == '16 (1)'
+        assert len(x_labels) == len(frame)
 
 
 def test_plot_script_runs_standalone(tmp_path):
