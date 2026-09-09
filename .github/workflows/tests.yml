@@ -1,0 +1,27 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+      - name: Run tests
+        # No Gurobi license is configured for CI, so Gurobi-dependent tests
+        # skip themselves (see tests/test_network_interdiction.py) rather
+        # than failing the build. If a WLS (Web License Service) token is
+        # ever added as a repo secret, wire it in here via the standard
+        # GRB_WLSACCESSID / GRB_WLSSECRET / GRB_LICENSEID env vars and
+        # those tests will start actually running instead of skipping.
+        run: python -m pytest tests/ -v

@@ -1,6 +1,18 @@
-networkx
-gurobipy
-dwave-neal
-matplotlib
-pyqubo
-dwave-system
+# Version floors chosen to guarantee the APIs this repo actually uses are
+# present (e.g. dwave.samplers.SteepestDescentSolver, dwave.system's
+# EmbeddingComposite/FixedEmbeddingComposite). No network access was
+# available to resolve/lock exact patch versions when these were written
+# (see issue #10) -- once you have a working install, freeze it with
+# `pip freeze > requirements.lock.txt` and commit that alongside this file.
+networkx>=3.2
+numpy>=1.26,<2.0   # pyqubo's compiled extension is not yet numpy 2.x safe as of writing
+gurobipy>=11.0     # requires a Gurobi license for anything beyond tiny models -- see README
+dwave-neal>=0.6.0
+dimod>=0.12.0
+matplotlib>=3.8
+pyqubo>=1.4.0
+dwave-system>=1.20  # requires a D-Wave Leap API token for the 'qa' solver path -- see README
+dwave-samplers>=1.0.0
+minorminer>=0.2.13
+dwave-networkx>=0.8.15
+pandas>=2.1         # only used by network_interdiction_plot.py

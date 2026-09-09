@@ -185,7 +185,6 @@ def solve_nip_gurobi_relaxation(G, src_node, tgt_node, B, λ_min, λ_max):
     finished = False
     best_obj = np.inf
     best_sol = []
-    # previous_iteration_feasible = False
     list_of_λs = []
     num_of_iterations_without_improvement = 0
     curr_ite = 0
@@ -233,33 +232,6 @@ def solve_nip_gurobi_relaxation(G, src_node, tgt_node, B, λ_min, λ_max):
         curr_obj = compute_objective(G, x_vals)
 
         print(f'Iteration {curr_ite}, Current lambda is {curr_λ}, Number of interdicted edges is {num_interdicted_edge}, Current objective is {curr_obj}')
-        # print(f'Current lambda is {curr_λ}')
-        # print(f'Number of interdicted edges is {num_interdicted_edge}')
-        # print(f'Current objective is {curr_obj}')
-        # print('-------------------')
-
-        # if num_interdicted_edge <= B: # we can decrease the lambda and see if we get better obj
-        #     λ_max = curr_λ #discard the right half of the lambda interval
-        #     if previous_iteration_feasible == False:
-        #         previous_iteration_feasible = True
-        #         best_obj = curr_obj
-        #     else: # the previous iteration already has a feasible solution, we need to check if we can improve it further
-        #         if curr_obj >= best_obj:
-        #             # finished = True # we return the previous feasible solution
-        #             num_of_iterations_without_improvement += 1
-        #             continue
-        #         else:
-        #             # keep iterating until we cannot improve the solution further
-        #             num_of_iterations_without_improvement = 0 # reset counter
-        #             best_obj = curr_obj
-        # else:
-        #     num_of_iterations_without_improvement = 0
-        #     λ_min = curr_λ #discard the left half of the lambda interval
-        #     if previous_iteration_feasible == True:
-        #         previous_iteration_feasible = False
-        #         continue
-        #     elif best_obj < np.inf and previous_iteration_feasible == False:
-        #         finished = True
 
         if num_interdicted_edge <= B: # we can decrease the lambda and see if we get better obj
             λ_max = curr_λ #discard the right half of the lambda interval
@@ -325,16 +297,7 @@ def gurobi_verify_parameters(G, src_node, tgt_node, B, λ, β):
         obj_func += β * (temp_u - temp_u * temp_v - temp_u * gamma[u,v] + w[u,v]*(temp_u + temp_v + gamma[u,v]-1) + (temp_u * temp_v + temp_u * gamma[u,v] + temp_v * gamma[u,v]) - (temp_u + temp_v + gamma[u,v]))
 
     # Set objective
-    # m.setObjective(quicksum(G[u][v]['weight']*(1-x[u,v])*gamma[u,v] for u,v in G.edges()) + curr_β*quicksum(pi[u] - pi[v]*pi[u] - pi[u]*gamma[u,v] + w[u,v]*(pi[u] + pi[v] + gamma[u,v]-1) + (pi[u] * pi[v] + pi[u] * gamma[u,v] + pi[v] * gamma[u,v]) - (pi[u] + pi[v] + gamma[u,v]) for u,v in G.edges()), GRB.MINIMIZE)
-
-    # m.setObjective(quicksum(G[u][v]['weight']*(1-x[u,v])*gamma[u,v] for u,v in G.edges()) + curr_β*quicksum(pi[u] - pi[u]*pi[v] - pi[u]*gamma[u,v] + w[u,v]*(pi[u] + pi[v] + gamma[u,v]-1) + (pi[u] * pi[v] + pi[u] * gamma[u,v] + pi[v] * gamma[u,v]) - (pi[u] + pi[v] + gamma[u,v]) for u,v in G.edges()) + 19.25*(quicksum(x[u,v] for u,v in G.edges()) - B), GRB.MINIMIZE)
-
     m.setObjective(quicksum(G[u][v]['weight']*(1-x[u,v])*gamma[u,v] for u,v in G.edges()) + obj_func + λ * (quicksum(x[u,v] for u,v in G.edges()) - B), GRB.MINIMIZE)
-
-    # pi_t - pi_s <= -1
-    # m.addConstr(pi[tgt_node] - pi[src_node] <= -1)
-
-    # m.addConstr(quicksum(x[u,v] for u,v in G.edges()) <= B)
 
     # Solve the model
     m.optimize()
@@ -399,39 +362,27 @@ def solve_nip_gurobi(G, src_node, tgt_node, B):
     print(f"Interdicted edges are: {interdicted_edges}")
     print('----------------------------')
 
-def improve_dwave_solution(di_g, sample, src_node, tgt_node, B):
-    def decompose_dwave_sample(sample):
-        num_edges = len(di_g.edges())
-        num_nodes = len(di_g.nodes())
-        x = np.zeros(num_edges, dtype=int)
-        γ = np.zeros(num_edges, dtype=int)
-        π = np.zeros(num_nodes, dtype=int)
+    return m.ObjVal, interdicted_edges
 
-        for i in range(num_edges):
-            if i not in sample:
-                x[i] = 0
-            else:
-                x[i] = sample[i]
+def improve_dwave_solution(di_g, x, src_node, tgt_node, B):
+    """
+    Greedily add/remove interdicted edges so exactly B edges are
+    interdicted, then return the resulting edge set and its max-flow
+    objective.
 
-            if i+num_edges not in sample:
-                # print(i)
-                γ[i] = 0
-            else:
-                γ[i] = sample[i+num_edges]
-
-        for i in range(num_nodes):
-            if i+2*num_edges not in sample:
-                π[i] = 0
-            else:
-                π[i] = sample[i+2*num_edges]
-            
-            if i == src_node:
-                π[i] = 1
-            elif i == tgt_node:
-                π[i] = 0
-        
-        return x, γ, π
-    
+    `x` is a 0/1 array indexed like sorted(di_g.edges()) -- the caller's
+    own decode of its sample, not a raw sample dict. This used to decompose
+    a raw annealer `sample` internally, assuming integer variable keys (the
+    nip_cubic.jl/Julia QUBO format used by the now-unsupported
+    solve_nip_qubo path, see issue #5). That silently no-op'd (treated
+    every sample as "0 edges interdicted", ignoring it entirely) when given
+    the string-keyed samples PyQUBO's nip_to_qubo() produces -- which is
+    what qubo_verify_parameters(), the only currently-supported caller,
+    actually passes. Fixed by taking the already-decoded `x` directly;
+    callers already decode their own sample for their own dual-constraint
+    checks, so this removes the format-coupling instead of just
+    re-fixing it to match one format again.
+    """
     def compute_objective(di_g, src_node, tgt_node, interdicted_edges):
         di_g_copy = di_g.copy()
         for (u,v) in interdicted_edges:
@@ -439,21 +390,6 @@ def improve_dwave_solution(di_g, sample, src_node, tgt_node, B):
 
         flow_value, flow_dict = nx.maximum_flow(di_g_copy, src_node, tgt_node, capacity='weight')
         return flow_value
-    
-    def compute_dual_constraint(di_g, π, γ):
-        edge_list = sorted(di_g.edges(), key=lambda element: (element[0], element[1]))
-        constraint = 0
-        edge_counter = 0
-        for (u,v) in edge_list:
-            constraint += π[u]*(1-π[v])*(1-γ[edge_counter])
-            # if π[u]*(1-π[v])*(1-γ[edge_counter]) != 0:
-            #     print(u,v, edge_counter)
-            #     print(π[u], π[v], γ[edge_counter])
-                
-            edge_counter += 1
-        return constraint
-    
-    x, γ, π = decompose_dwave_sample(sample)
 
     edge_list = sorted(di_g.edges(), key=lambda element: (element[0], element[1]))
     interdicted_edges = []
@@ -494,13 +430,22 @@ def improve_dwave_solution(di_g, sample, src_node, tgt_node, B):
 
             interdicted_edges.remove(best_candidate_interdicted_edge)
 
-    # dual_constraint = compute_dual_constraint(di_g, π, γ)
-    # if dual_constraint != 0:
-    #     pass
-
     return interdicted_edges, compute_objective(di_g, src_node, tgt_node,  interdicted_edges)
 
 def solve_nip_qubo(name, di_g, λ_min, λ_max, src_node, tgt_node, B=2, solver='sa'):
+    # UNSUPPORTED (see issue #5): this path shells out to `julia nip_cubic.jl`,
+    # which is not included in this repository, so it will fail with a
+    # confusing "no such file" error if run as-is. Left in place for
+    # reference. Prefer nip_to_qubo() + qubo_verify_parameters() (used in
+    # main()), which builds the QUBO directly via PyQUBO instead of Julia.
+    # Also note: its call below to improve_dwave_solution() passes a raw
+    # sample dict, which no longer matches that function's signature (it
+    # now takes an already-decoded x array -- see improve_dwave_solution's
+    # docstring); update that call too if this path is ever revived.
+    raise NotImplementedError(
+        "solve_nip_qubo() depends on the missing nip_cubic.jl script (see issue #5) "
+        "and is currently unsupported. Use nip_to_qubo() + qubo_verify_parameters() instead."
+    )
     # decompose qubo samples to variables in our integer program, note: the order of edges is VERY important
     def decompose_dwave_sample(sample):
         num_edges = len(di_g.edges())
@@ -768,6 +713,19 @@ def solve_nip_qubo(name, di_g, λ_min, λ_max, src_node, tgt_node, B=2, solver='
     print('------------------------------------')
 
 def solve_nip_qubo_repair_once_end(name, di_g, λ_min, λ_max, src_node, tgt_node, B=2, solver='sa'):
+    # UNSUPPORTED (see issue #5): this path shells out to `julia nip_cubic.jl`,
+    # which is not included in this repository, so it will fail with a
+    # confusing "no such file" error if run as-is. Left in place for
+    # reference. Prefer nip_to_qubo() + qubo_verify_parameters() (used in
+    # main()), which builds the QUBO directly via PyQUBO instead of Julia.
+    # Also note: its call below to improve_dwave_solution() passes a raw
+    # sample dict, which no longer matches that function's signature (it
+    # now takes an already-decoded x array -- see improve_dwave_solution's
+    # docstring); update that call too if this path is ever revived.
+    raise NotImplementedError(
+        "solve_nip_qubo_repair_once_end() depends on the missing nip_cubic.jl script (see issue #5) "
+        "and is currently unsupported. Use nip_to_qubo() + qubo_verify_parameters() instead."
+    )
     # decompose qubo samples to variables in our integer program, note: the order of edges is VERY important
     def decompose_dwave_sample(sample):
         num_edges = len(di_g.edges())
@@ -1154,161 +1112,57 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
             best_energies.append(records[k][1])
         edge_list = sorted(di_g.edges(), key=lambda element: (element[0], element[1]))
 
-        if False:
-            # Here we pick the best 100 samples, collect all interdicted edges, and we sample from these edges based on how frequent they occur
-            interdicted_edge_dict = {}
-            for k in range(100):
-                curr_sample = records[k][0]
-                currs_sample_dict = {}
-                for m in range(len(variable_labels)):
-                    currs_sample_dict[variable_labels[m]] = curr_sample[m]
-                x, γ, π = decompose_dwave_sample(currs_sample_dict)
-                for i in range(len(x)):
-                    if x[i] == 1:
-                        if edge_list[i] not in interdicted_edge_dict:
-                            interdicted_edge_dict[edge_list[i]] = 1
-                        else:
-                            interdicted_edge_dict[edge_list[i]] += 1
+        best_sol_interdicted_edge = []
+        best_sol_after_greedy = np.inf
+        best_sol_before_greedy = np.inf
 
-            interdicted_edge_dict = dict(sorted(interdicted_edge_dict.items(), key=lambda item: item[1], reverse=True))
-            interdicted_edge_dict = list(interdicted_edge_dict.items())
+        for ite in range(len(best_samples)):
+            print(f'Sample {ite+1}:')
+            curr_best_sample = best_samples[ite]
+            curr_energy = best_energies[ite]
+            x, γ, π = decompose_dwave_sample(curr_best_sample)
+            print(f"Energy for current sample: {curr_energy}")
 
-            sample_prob = np.zeros(len(interdicted_edge_dict))
-            for i in range(len(interdicted_edge_dict)):
-                sample_prob[i] = interdicted_edge_dict[i][1]
-            
-            sample_prob /= np.sum(sample_prob)
+            num_interdicted_edge = sum(x)
+            interdicted_edges = []
+            for i in range(len(x)):
+                if x[i] == 1:
+                    interdicted_edges.append(edge_list[i])
 
-            for _ in range(20):
-                interdicted_edges_indices = np.random.choice(len(interdicted_edge_dict), B, replace=False, p=sample_prob)
-                interdicted_edges = []
-                for i in range(B):
-                    interdicted_edges.append(interdicted_edge_dict[interdicted_edges_indices[i]][0])
-                print(compute_objective_maxflow(di_g, src_node, tgt_node,interdicted_edges))
-            print(best_energies)
-        
-        else:
-            best_sol_interdicted_edge = []
-            best_sol_after_greedy = np.inf
-            best_sol_before_greedy = np.inf
+            curr_obj = compute_objective(di_g, x, γ)
 
-            for ite in range(len(best_samples)): 
-                print(f'Sample {ite+1}:')
-                curr_best_sample = best_samples[ite]
-                curr_energy = best_energies[ite]
-                x, γ, π = decompose_dwave_sample(curr_best_sample)
-                print(f"Energy for current sample: {curr_energy}")
+            if curr_obj < best_sol_before_greedy and num_interdicted_edge <= B:
+                best_sol_before_greedy = curr_obj
 
-                num_interdicted_edge = sum(x)
-                interdicted_edges = []
-                for i in range(len(x)):
-                    if x[i] == 1:
-                        interdicted_edges.append(edge_list[i])
-            
-            
-                curr_obj = compute_objective(di_g, x, γ)
+            print(f'Number of interdicted edge is {num_interdicted_edge}, penalty is {curr_λ * (num_interdicted_edge - B)}')
+            print(f'Interdicted edges are: {interdicted_edges}')
+            print(f'Objective is {curr_obj}')
+            print()
 
-                if curr_obj < best_sol_before_greedy and num_interdicted_edge <= B:
-                    best_sol_before_greedy = curr_obj
+            interdicted_edges_improved, objective_improved = improve_dwave_solution(di_g, x, src_node, tgt_node, B)
+            print(f'Interdicted edges are greedy improvement: {interdicted_edges_improved}')
+            print(f'Objective after greedy improvement is {objective_improved}')
+            print('----------------------------')
 
-                print(f'Number of interdicted edge is {num_interdicted_edge}, penalty is {curr_λ * (num_interdicted_edge - B)}')
-                print(f'Interdicted edges are: {interdicted_edges}')
-                print(f'Objective is {curr_obj}')
-                # if compute_dual_constraint(di_g, π, γ) != 0:
-                #     print("Dual constraint is non-zero, check your QUBO!")
-                    # exit(1)
-                print()
+            if objective_improved < best_sol_after_greedy:
+                best_sol_after_greedy = objective_improved
+                best_sol_interdicted_edge = interdicted_edges_improved
 
-                interdicted_edges_improved, objective_improved = improve_dwave_solution(di_g, curr_best_sample, src_node, tgt_node, B)
-                print(f'Interdicted edges are greedy improvement: {interdicted_edges_improved}')
-                print(f'Objective after greedy improvement is {objective_improved}')
-                print('----------------------------')
-
-                if objective_improved < best_sol_after_greedy:
-                    best_sol_after_greedy = objective_improved
-                    best_sol_interdicted_edge = interdicted_edges_improved
-            
-            print(f'Best energy: {best_energies[0]}')
-            print(f'Best objective before greedy improvement: {best_sol_before_greedy}')
-            print(f'Best objective after greedy improvement: {best_sol_after_greedy}')
-            print(f'Best set of interdicted edges: {best_sol_interdicted_edge}')
-
-
-        # for i in range(len(top_interdicted_edges)-1):
-        #     for j in range(i+1, len(top_interdicted_edges)):
-        #         print(compute_objective_maxflow(di_g, src_node, tgt_node, [top_interdicted_edges[i][0], top_interdicted_edges[j][0]]))
+        print(f'Best energy: {best_energies[0]}')
+        print(f'Best objective before greedy improvement: {best_sol_before_greedy}')
+        print(f'Best objective after greedy improvement: {best_sol_after_greedy}')
+        print(f'Best set of interdicted edges: {best_sol_interdicted_edge}')
 
     elif solver == 'qci':
+        # NOTE: solve_qubo_via_qci is not imported anywhere in this module
+        # -- this branch will raise NameError if ever reached. Flagged, not
+        # fixed here (out of scope for issue #7/#8); 'sa' is the only
+        # solver path main() actually exercises.
         curr_best_sample = solve_qubo_via_qci.solver_qubo_dirac1(f"./qubos/{name}_{curr_λ}.qubo", di_g)
 
     else:
         print(f"Unsupported solver: {solver}")
         exit(1)
-
-    # best_sol_interdicted_edge = []
-    # best_energy = np.inf
-
-    # for ite in range(len(best_samples)): 
-    #     print(f'Sample {ite+1}:')
-    #     curr_best_sample = best_samples[ite]
-    #     curr_best_energy = best_energies[ite]
-
-    #     x, γ, π = decompose_dwave_sample(curr_best_sample)
-    #     print(f"Best energy found: {curr_best_energy}")
-
-    #     improve_dwave_solution(di_g, curr_best_sample, src_node, tgt_node, B)
-
-    #     num_interdicted_edge = sum(x)
-    #     edge_list = sorted(di_g.edges(), key=lambda element: (element[0], element[1]))
-    #     interdicted_edges = []
-    #     for i in range(len(x)):
-    #         if x[i] == 1:
-    #             interdicted_edges.append(edge_list[i])
-    
-    
-    #     curr_obj = compute_objective(di_g, x, γ)
-    #     print(f'Number of interdicted edge is {num_interdicted_edge}, penalty is {curr_λ * (num_interdicted_edge - B)}')
-    #     print(f'Interdicted edges are: {interdicted_edges}')
-    #     print(f'Objective is {curr_obj}')
-    #     if compute_dual_constraint(di_g, π, γ) != 0:
-    #         print("Dual constraint is non-zero, check your QUBO!")
-    #         # exit(1)
-    #     print()
-
-    #     interdicted_edges_improved, objective_improved = improve_dwave_solution(di_g, curr_best_sample, src_node, tgt_node, B)
-    #     print(f'Interdicted edges are greedy improvement: {interdicted_edges_improved}')
-    #     print(f'Objective are greedy improvement is {objective_improved}')
-    #     print('----------------------------')
-
-    #     if objective_improved < best_energy:
-    #         best_energy = objective_improved
-    #         best_sol_interdicted_edge = interdicted_edges_improved
-
-    # print(f'Best objective: {best_energy}')
-    # print(f'Best set of interdicted edges: {best_sol_interdicted_edge}')
-
-    # print(f'Dual Constraint is {compute_dual_constraint(di_g, π, γ)}')
-    # if num_interdicted_edge <= B: # we can decrease the lambda and see if we get better obj
-    #     λ_max = curr_λ #discard the right half of the lambda interval
-    #     if previous_iteration_feasible == False:
-    #         previous_iteration_feasible = True
-    #         best_obj = curr_obj
-    #         best_sol = (x, γ, π)
-    #     else: # the previous iteration already has a feasible solution, we need to check if we can improve it further
-    #         if curr_obj >= best_obj:
-    #             finished = True # we return the previous feasible solution
-    #             continue
-    #         else:
-    #             # keep iterating until we cannot improve the solution further
-    #             best_obj = curr_obj
-    #             best_sol = (x, γ, π)
-    # else:
-    #     λ_min = curr_λ #discard the left half of the lambda interval
-    #     if previous_iteration_feasible == True:
-    #         previous_iteration_feasible = False
-    #         continue
-    #     if best_obj < np.inf and previous_iteration_feasible == False:
-    #         break
 
 def main():
     graph_type = 'planar'
