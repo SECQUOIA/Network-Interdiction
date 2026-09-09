@@ -37,3 +37,69 @@ python network_interdiction.py
 `main()` picks a test instance from [testcases/](testcases/), solves it
 exactly via Gurobi, then via the QUBO formulation + simulated annealing, and
 prints a comparison.
+
+## Benchmark results and plots
+
+[network_interdiction_plot.py](network_interdiction_plot.py) draws the two
+comparison figures (flow reduction and QUBO energy, each relative to the exact
+optimum) from a results CSV. That CSV is produced by
+[run_benchmark.py](run_benchmark.py), which runs the pipeline over a list of
+`instance:budget:lambda` cases and writes one row per case.
+
+A small sample is checked in, so the plotting script runs with no arguments and
+no license or token:
+
+```
+python network_interdiction_plot.py
+```
+
+It reads [results/sample_results_sa.csv](results/sample_results_sa.csv) and
+writes `sample_results_sa_flow_reduction.pdf` and
+`sample_results_sa_qubo_energy.pdf` into the current directory (`--csv` and
+`--outdir` change both). The sample covers the deliberately tiny
+`testcases/tiny_*.flow` instances and only the simulated-annealing pass; its
+`QA_*` columns are empty, and a solver whose columns are empty is skipped
+rather than drawn as empty bars.
+
+### Regenerating the results CSV
+
+The sample is reproducible on any machine, with no Gurobi license and no
+D-Wave token:
+
+```
+python run_benchmark.py --exact brute --solvers sa \
+    --case testcases/tiny_a.flow:1:6.0 \
+    --case testcases/tiny_b.flow:1:9.0 \
+    --case testcases/tiny_b.flow:2:6.0 \
+    --case testcases/tiny_c.flow:1:4.5 \
+    --case testcases/tiny_d.flow:1:8.0 \
+    --case testcases/tiny_d.flow:2:6.5 \
+    --out results/sample_results_sa.csv
+```
+
+`--exact brute` gets the `Opt_NIP`/`Opt_QUBO` columns by enumerating every edge
+subset within the budget and by brute-forcing the QUBO's ground state with
+`dimod.ExactSolver`. That costs `2**(3E + V - 2)` and is capped at 24 QUBO
+variables, which is why the sample instances are as small as they are.
+
+A real run needs the licensed tools:
+
+```
+python run_benchmark.py --exact gurobi --solvers sa,qa \
+    --case testcases/50.planarflow:12:36 \
+    --out result_dwave_planar.csv
+```
+
+`--exact gurobi` takes the exact columns from `solve_nip_gurobi()` and
+`gurobi_verify_parameters()` (Gurobi license required), and `--solvers sa,qa`
+adds the QPU pass (D-Wave Leap token required). Both are described under
+[Setup](#setup) above.
+
+The third field of each `--case` is the cardinality penalty coefficient, passed
+to `nip_to_qubo()` as `(lambda, lambda+1)`. It is not a free parameter: the
+window of coefficients whose QUBO ground state actually encodes the NIP optimum
+is narrow, and outside it every ratio in the row would be measured against the
+wrong target. `run_benchmark.py` checks that the exact QUBO optimum decodes to
+an optimal interdiction and refuses to write the row otherwise, so a bad
+lambda fails loudly instead of producing a plausible-looking plot. Deriving
+those bounds rather than searching for them is [issue #2](../../issues/2).
