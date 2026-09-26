@@ -82,6 +82,17 @@ subset within the budget and by brute-forcing the QUBO's ground state with
 `dimod.ExactSolver`. That costs `2**(3E + V - 2)` and is capped at 24 QUBO
 variables, which is why the sample instances are as small as they are.
 
+Every run also fills two classical baseline columns by default (issue #15):
+`Greedy`, the surviving flow after cutting the single highest-impact arc `B`
+times starting from nothing, and `Random_Greedy`, the best over 20 random
+interdictions (each arc cut with probability `B/E`) after the same greedy
+repair the annealer samples get. They hold the repair fixed and remove the
+annealer's information, so an SA or QA result that does not beat them on an
+instance contributed nothing measurable there. Both are free to compute;
+`--baselines none` turns them off and `--seed` fixes the random one. On the
+checked-in sample both baselines already reach the optimum on every row, so
+the sample shows the format rather than separating SA from greedy.
+
 A real run needs the licensed tools:
 
 ```

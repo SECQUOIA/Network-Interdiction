@@ -23,9 +23,15 @@ SA_NIP_Greedy   same, after improve_dwave_solution() repairs each sample to
                 exactly B interdicted edges
 SA_QUBO         lowest QUBO energy the annealer reached
 QA_*            the same three columns for the D-Wave QPU path
+Greedy          surviving flow after interdicting B arcs greedily from an
+                empty interdiction, one highest-impact arc at a time
+Random_Greedy   best surviving flow over 20 random interdictions (each arc
+                cut independently with probability B/E), each repaired to
+                exactly B arcs by the same greedy pass
 
 `instance` and `lambda` are additions to what the plot reads; pandas ignores
-them.
+them. The two baseline columns are optional for the plot: it draws them when
+present and non-empty.
 
 Exact-reference backends (--exact)
 ----------------------------------
@@ -45,6 +51,19 @@ Solver passes (--solvers)
 `sa` needs no credentials. `qa` needs a D-Wave Leap token (see README); the
 columns of a pass that was not run are left empty, and the plotting script
 skips a series whose columns are empty rather than drawing empty bars.
+
+Classical baselines (--baselines)
+---------------------------------
+`greedy` and `random` (both run by default; `none` disables them) are the
+controls for the annealer passes (issue #15). The annealer pipeline decodes the
+20 lowest-energy samples and repairs each with improve_dwave_solution(), so its
+reported *_Greedy number mixes two contributions: what the sampler found, and
+what the repair recovered. The baselines hold the repair fixed and replace the
+sampler: `greedy` starts it from nothing, `random` starts it from 20 samples
+that carry no information about the instance beyond the budget. An annealer
+pass that does not beat these on an instance contributed nothing measurable
+there. Both need no credentials. `random` is seeded (--seed) so a CSV is
+reproducible.
 
 Examples
 --------
@@ -70,6 +89,7 @@ import sys
 
 import dimod
 import networkx as nx
+import numpy as np
 
 import network_interdiction as ni
 
@@ -93,7 +113,22 @@ SOLVER_COLUMNS = {
            'QA_QUBO(advantage1)'),
 }
 
+# Classical baseline passes -> the column each fills. Kept out of
+# PLOT_COLUMNS: the plot treats them as optional, so CSVs written before they
+# existed still plot.
+BASELINE_COLUMNS = {
+    'greedy': 'Greedy',
+    'random': 'Random_Greedy',
+}
+
+CSV_COLUMNS = CSV_COLUMNS[:-1] + list(BASELINE_COLUMNS.values()) + \
+    CSV_COLUMNS[-1:]
+
 DEFAULT_MAX_EXACT_VARS = 24
+
+# Matches the 20 lowest-energy samples qubo_verify_parameters() decodes, so
+# the random baseline repairs as many starting points as the annealer pass.
+RANDOM_BASELINE_SAMPLES = 20
 
 
 def max_flow(di_g, src_node, tgt_node, interdicted_edges=()):
@@ -186,9 +221,53 @@ def exact_reference(backend, di_g, src_node, tgt_node, B, curr_λ,
     return opt_nip, opt_qubo
 
 
+def greedy_from_scratch(di_g, src_node, tgt_node, B):
+    """
+    Surviving max flow after interdicting B arcs greedily from nothing.
+
+    This is improve_dwave_solution() started from the empty interdiction, so
+    it adds the single highest-impact arc B times (ties go to the first arc
+    in sorted order). Greedy is not optimal in general -- a single arc that
+    cuts the most flow now can be the wrong first move for a pair -- but on
+    the random families in testcases/ it frequently is, which is why it is
+    the number an annealer result has to beat.
+    """
+    x = np.zeros(len(di_g.edges()), dtype=int)
+    _, objective = ni.improve_dwave_solution(di_g, x, src_node, tgt_node, B)
+    return objective
+
+
+def random_greedy(di_g, src_node, tgt_node, B, rng,
+                  num_samples=RANDOM_BASELINE_SAMPLES):
+    """
+    Best surviving flow over `num_samples` random interdictions, each
+    repaired to exactly B arcs by improve_dwave_solution().
+
+    Each arc is cut independently with probability B/E, so a sample has about
+    the budgeted number of cuts but no information about which arcs matter.
+    That is the null model for the annealer pass: same count of starting
+    points, same repair, samples that know the budget and nothing else. (A
+    uniform random bitstring would cut about E/2 arcs and make the repair do
+    all the work, which measures the repair, not the sampler.)
+    """
+    num_edges = len(di_g.edges())
+    p_cut = min(1.0, B / num_edges) if num_edges else 0.0
+    best = math.inf
+    for _ in range(num_samples):
+        x = (rng.random(num_edges) < p_cut).astype(int)
+        _, objective = ni.improve_dwave_solution(
+            di_g, x, src_node, tgt_node, B)
+        best = min(best, objective)
+    return best
+
+
 def run_case(instance, B, curr_λ, exact_backend, solvers,
-             max_exact_vars=DEFAULT_MAX_EXACT_VARS):
-    """Compute one CSV row. `instance` is a path to a flow file."""
+             max_exact_vars=DEFAULT_MAX_EXACT_VARS, baselines=(), rng=None):
+    """
+    Compute one CSV row. `instance` is a path to a flow file; `baselines` is
+    any subset of BASELINE_COLUMNS' keys, and `rng` a numpy Generator for the
+    random baseline (a fresh unseeded one if omitted).
+    """
     di_g, src_node, tgt_node = ni.read_flow_file(instance)
     opt_nip, opt_qubo = exact_reference(
         exact_backend, di_g, src_node, tgt_node, B, curr_λ, max_exact_vars)
@@ -218,6 +297,14 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
         row[greedy_col] = result['best_obj_after_greedy']
         row[qubo_col] = result['best_energy']
 
+    if 'greedy' in baselines:
+        row[BASELINE_COLUMNS['greedy']] = greedy_from_scratch(
+            di_g, src_node, tgt_node, B)
+    if 'random' in baselines:
+        row[BASELINE_COLUMNS['random']] = random_greedy(
+            di_g, src_node, tgt_node, B,
+            rng if rng is not None else np.random.default_rng())
+
     return row
 
 
@@ -246,6 +333,17 @@ def parse_solvers(spec):
     return solvers
 
 
+def parse_baselines(spec):
+    if spec == 'none':
+        return []
+    baselines = [b.strip() for b in spec.split(',') if b.strip()]
+    for baseline in baselines:
+        if baseline not in BASELINE_COLUMNS:
+            raise argparse.ArgumentTypeError(
+                f"unknown baseline {baseline!r}, expected greedy and/or random")
+    return baselines
+
+
 def repo_commit():
     """
     Current commit, for the CSV provenance header ('unknown' if git is not
@@ -266,7 +364,7 @@ def repo_commit():
         return 'unknown'
 
 
-def provenance_lines(args, solvers):
+def provenance_lines(args, solvers, baselines):
     """
     Comment header for the CSV. network_interdiction_plot.py already reads
     the CSV with comment='#', so these lines are stripped on load.
@@ -281,6 +379,8 @@ def provenance_lines(args, solvers):
         f"generated (UTC): {generated}",
         f"exact backend: {args.exact}",
         f"solver passes: {', '.join(solvers) if solvers else 'none'}",
+        f"baselines: {', '.join(baselines) if baselines else 'none'}"
+        + (f" (seed {args.seed})" if 'random' in baselines else ''),
     ]
     missing = [s for s in SOLVER_COLUMNS if s not in solvers]
     if missing:
@@ -316,6 +416,14 @@ def main(argv=None):
         help="annealing passes to run: 'sa', 'qa', 'sa,qa' or 'none' "
              '(default: sa)')
     parser.add_argument(
+        '--baselines', type=parse_baselines, default='greedy,random',
+        metavar='greedy[,random]',
+        help="classical baselines to run: 'greedy', 'random', both, or "
+             "'none' (default: greedy,random)")
+    parser.add_argument(
+        '--seed', type=int, default=0,
+        help='seed for the random baseline (default: 0)')
+    parser.add_argument(
         '--max-exact-vars', type=int, default=DEFAULT_MAX_EXACT_VARS,
         help='refuse --exact brute past this many QUBO variables '
              f'(default: {DEFAULT_MAX_EXACT_VARS})')
@@ -325,14 +433,19 @@ def main(argv=None):
 
     solvers = args.solvers if isinstance(args.solvers, list) else \
         parse_solvers(args.solvers)
+    baselines = args.baselines if isinstance(args.baselines, list) else \
+        parse_baselines(args.baselines)
+    # One generator for the whole run, so a CSV is reproducible from its
+    # command line and seed alone.
+    rng = np.random.default_rng(args.seed)
 
     rows = []
     for instance, B, curr_λ in args.cases:
         print(f'=== {instance} B={B} lambda={curr_λ} ===')
         rows.append(run_case(instance, B, curr_λ, args.exact, solvers,
-                             args.max_exact_vars))
+                             args.max_exact_vars, baselines, rng))
 
-    write_csv(args.out, rows, provenance_lines(args, solvers))
+    write_csv(args.out, rows, provenance_lines(args, solvers, baselines))
     print(f'Wrote {len(rows)} row(s) to {args.out}')
     return 0
 
