@@ -64,11 +64,56 @@ def test_greedy_matches_the_optimum_where_the_greedy_order_is_right():
     assert rb.greedy_from_scratch(g, src, tgt, 2) == 5
 
 
-def test_random_greedy_is_reproducible_from_its_seed():
-    g, src, tgt = build_greedy_trap()
-    first = rb.random_greedy(g, src, tgt, 2, np.random.default_rng(7))
-    again = rb.random_greedy(g, src, tgt, 2, np.random.default_rng(7))
+def record_starting_samples(monkeypatch, objectives=None):
+    """
+    Stub improve_dwave_solution so a test sees the random starting
+    interdictions themselves. Returns the list the samples are appended to;
+    each stubbed repair returns the next value of `objectives` (or 0).
+    """
+    samples = []
+    scripted = iter(objectives or [])
+
+    def record(di_g, x, src_node, tgt_node, budget):
+        samples.append(tuple(int(v) for v in x))
+        return [], next(scripted, 0)
+
+    monkeypatch.setattr(ni, 'improve_dwave_solution', record)
+    return samples
+
+
+def test_random_greedy_is_reproducible_from_its_seed(monkeypatch):
+    """
+    Compares the starting samples, not the result: on a small instance many
+    different samples repair to the same flow, so equal results would not
+    show that the seed was actually used.
+    """
+    g, src, tgt = ni.read_flow_file(
+        os.path.join(REPO_ROOT, 'testcases', '50.planarflow'))
+    samples = record_starting_samples(monkeypatch)
+
+    rb.random_greedy(g, src, tgt, 5, np.random.default_rng(7))
+    first = list(samples)
+    samples.clear()
+    rb.random_greedy(g, src, tgt, 5, np.random.default_rng(7))
+    again = list(samples)
+    samples.clear()
+    rb.random_greedy(g, src, tgt, 5, np.random.default_rng(8))
+    other = list(samples)
+
+    assert len(first) == rb.RANDOM_BASELINE_SAMPLES
     assert first == again
+    assert first != other
+
+
+def test_random_greedy_reports_the_best_repaired_sample(monkeypatch):
+    """Best of the repaired samples -- not the first, not the last."""
+    g, src, tgt = build_greedy_trap()
+    objectives = [7, 3, 9, 4, 8]
+    record_starting_samples(monkeypatch, objectives)
+
+    value = rb.random_greedy(g, src, tgt, 2, np.random.default_rng(0),
+                             num_samples=len(objectives))
+    assert value == 3
 
 
 def test_random_greedy_returns_a_budget_feasible_value():
@@ -93,15 +138,10 @@ def test_random_greedy_draws_budget_sized_samples(monkeypatch):
         os.path.join(REPO_ROOT, 'testcases', '50.planarflow'))
     num_edges = len(g.edges())
     B = 5
-    sizes = []
-
-    def record(di_g, x, src_node, tgt_node, budget):
-        sizes.append(int(np.sum(x)))
-        return [], 0
-
-    monkeypatch.setattr(ni, 'improve_dwave_solution', record)
+    samples = record_starting_samples(monkeypatch)
     rb.random_greedy(g, src, tgt, B, np.random.default_rng(0),
                      num_samples=200)
+    sizes = [sum(x) for x in samples]
 
     assert len(sizes) == 200
     # Binomial(E, B/E): mean B, far below E/2 for any E worth benchmarking.
