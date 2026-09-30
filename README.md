@@ -55,9 +55,9 @@ python decomposition.py testcases/50.planarflow --pieces 4 --budget 12
 ```
 
 Each piece's subproblem is exact: cutting any set of its arcs leaves the
-reduced network the same max flow as the whole graph. The decomposition as a
-whole is a heuristic, since the budget split is fixed before any piece is
-solved. Two limits to know:
+reduced network with the same max flow as the whole graph with those arcs
+cut. The decomposition as a whole is a heuristic, since the budget split is
+fixed before any piece is solved. Two limits to know:
 
 - A piece's QUBO needs its own cardinality coefficient: the lambda window
   (issue #2) of the piece, not the whole graph's.
