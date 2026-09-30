@@ -14,6 +14,9 @@ V, E, B         instance size and interdiction budget
 lambda          cardinality penalty coefficient; nip_to_qubo() is called with
                 (lambda, lambda+1) as (cardinality, dual) coefficients, the
                 same pairing qubo_verify_parameters() uses
+lambda_lo,      for a case run with lambda `auto`: the exact window of
+lambda_hi       coefficients whose QUBO ground state is the optimal B-arc
+                interdiction (see "Choosing lambda" below)
 maxflow         max flow of the un-interdicted instance
 Opt_NIP         optimal surviving flow under the budget (exact)
 Opt_QUBO        exact ground-state energy of the QUBO at that lambda
@@ -65,18 +68,36 @@ pass that does not beat these on an instance contributed nothing measurable
 there. Both need no credentials. `random` is seeded (--seed) so a CSV is
 reproducible.
 
+Choosing lambda (`auto`)
+------------------------
+The budget term in nip_to_qubo() is linear, lambda * (sum(x) - B), so the
+QUBO ground state minimizes f(k) + lambda * k over the number k of interdicted
+arcs, where f(k) is the best surviving flow using at most k arcs. It
+interdicts exactly B arcs and attains f(B) if and only if
+
+    max_{k>B} (f(B) - f(k)) / (k - B)  <  lambda  <  min_{k<B} (f(k) - f(B)) / (B - k)
+
+(Proposition 3 of mfnip-qubo-research-notes; the dual coefficient lambda+1 is
+always safe, Proposition 2). Writing `auto` for the lambda field of a --case
+computes f with the --exact backend -- f(0..B) plus f(k) for k > B up to its
+first zero, past which no k can tighten the lower end -- and uses the
+midpoint of that window. The window is empty exactly when f is not convex at
+B; then no lambda makes this QUBO's ground state the answer, so the row keeps
+the exact optimum and the baselines but leaves lambda, Opt_QUBO and the
+solver columns blank rather than scoring a solver against the wrong target.
+
 Examples
 --------
 Regenerate the checked-in sample (no license or token needed):
 
     python run_benchmark.py --exact brute --solvers sa \\
-        --case testcases/tiny_a.flow:1:6 \\
+        --case testcases/tiny_a.flow:1:auto \\
         --out results/sample_results_sa.csv
 
 A real run over a planar instance (needs Gurobi, and a Leap token for qa):
 
     python run_benchmark.py --exact gurobi --solvers sa,qa \\
-        --case testcases/50.planarflow:12:36 \\
+        --case testcases/50.planarflow:10:auto \\
         --out result_dwave_planar.csv
 """
 import argparse
@@ -105,7 +126,8 @@ PLOT_COLUMNS = [
 # What run_benchmark.py actually writes: the plot's columns plus the instance
 # path and lambda. The plot ignores those two, but without them a row cannot
 # be traced back to -- or recomputed from -- the instance that produced it.
-CSV_COLUMNS = ['instance'] + PLOT_COLUMNS[:3] + ['lambda'] + PLOT_COLUMNS[3:]
+CSV_COLUMNS = ['instance'] + PLOT_COLUMNS[:3] + \
+    ['lambda', 'lambda_lo', 'lambda_hi'] + PLOT_COLUMNS[3:]
 
 SOLVER_COLUMNS = {
     'sa': ('SA_NIP', 'SA_NIP_Greedy', 'SA_QUBO'),
@@ -221,6 +243,65 @@ def exact_reference(backend, di_g, src_node, tgt_node, B, curr_λ,
     return opt_nip, opt_qubo
 
 
+def nip_optimum(backend, di_g, src_node, tgt_node, k):
+    """f(k): the best surviving flow using at most k interdicted arcs."""
+    if backend == 'brute':
+        return brute_force_nip_optimum(di_g, src_node, tgt_node, k)[0]
+    if backend == 'gurobi':
+        # Capacities are integers (read_flow_file), so the optimum is too;
+        # rounding strips MIP tolerance noise that would otherwise leak into
+        # the window's difference quotients and the curve's zero test.
+        return round(ni.solve_nip_gurobi(di_g, src_node, tgt_node, k)[0])
+    raise ValueError(f"unknown exact backend: {backend}")
+
+
+def optimum_curve(backend, di_g, src_node, tgt_node, B):
+    """
+    [f(0), f(1), ...] far enough to determine the lambda window at B.
+
+    That is f(0..B), then f(k) for k > B up to and including its first zero:
+    f is nonincreasing and nonnegative, so once f(k0) = 0 every larger k has
+    f = 0 and a smaller slope (f(B) - 0) / (k - B) than k0 does, and cannot
+    move the lower end of the window. f reaches 0 by the time every arc out
+    of the source is cut, so the scan is short on any instance with a small
+    source degree.
+    """
+    num_edges = len(di_g.edges())
+    curve = []
+    for k in range(num_edges + 1):
+        curve.append(nip_optimum(backend, di_g, src_node, tgt_node, k))
+        if k > B and curve[-1] == 0:
+            break
+    return curve
+
+
+def lambda_window(curve, B):
+    """
+    (lo, hi): the open interval of cardinality coefficients lambda for which
+    the QUBO ground state interdicts exactly B arcs and attains f(B), given
+    curve = optimum_curve(...). Non-empty iff lo < hi, i.e. iff B is a vertex
+    of the lower convex envelope of f. hi is inf when B = 0.
+    """
+    hi = min(((curve[k] - curve[B]) / (B - k) for k in range(B)),
+             default=math.inf)
+    lo = max(((curve[B] - curve[k]) / (k - B)
+              for k in range(B + 1, len(curve))), default=0.0)
+    return lo, hi
+
+
+def choose_lambda(lo, hi):
+    """
+    The midpoint of the window, or None when it is empty. The endpoints
+    themselves are ties (a degenerate ground state), so a strictly interior
+    point is required.
+    """
+    if lo >= hi:
+        return None
+    if math.isinf(hi):
+        return lo + 1.0
+    return (lo + hi) / 2
+
+
 def greedy_from_scratch(di_g, src_node, tgt_node, B):
     """
     Surviving max flow after interdicting B arcs greedily from nothing.
@@ -264,13 +345,13 @@ def random_greedy(di_g, src_node, tgt_node, B, rng,
 def run_case(instance, B, curr_λ, exact_backend, solvers,
              max_exact_vars=DEFAULT_MAX_EXACT_VARS, baselines=(), rng=None):
     """
-    Compute one CSV row. `instance` is a path to a flow file; `baselines` is
-    any subset of BASELINE_COLUMNS' keys, and `rng` a numpy Generator for the
-    random baseline (a fresh unseeded one if omitted).
+    Compute one CSV row. `instance` is a path to a flow file; `curr_λ` is a
+    float or 'auto' (pick it from the exact window, see the module
+    docstring); `baselines` is any subset of BASELINE_COLUMNS' keys, and `rng`
+    a numpy Generator for the random baseline (a fresh unseeded one if
+    omitted).
     """
     di_g, src_node, tgt_node = ni.read_flow_file(instance)
-    opt_nip, opt_qubo = exact_reference(
-        exact_backend, di_g, src_node, tgt_node, B, curr_λ, max_exact_vars)
 
     row = {column: '' for column in CSV_COLUMNS}
     row.update({
@@ -278,11 +359,25 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
         'V': len(di_g.nodes()),
         'E': len(di_g.edges()),
         'B': B,
-        'lambda': curr_λ,
         'maxflow': max_flow(di_g, src_node, tgt_node),
-        'Opt_NIP': opt_nip,
-        'Opt_QUBO': opt_qubo,
     })
+
+    if curr_λ == 'auto':
+        curve = optimum_curve(exact_backend, di_g, src_node, tgt_node, B)
+        lo, hi = lambda_window(curve, B)
+        row.update({'lambda_lo': lo, 'lambda_hi': hi, 'Opt_NIP': curve[B]})
+        curr_λ = choose_lambda(lo, hi)
+        if curr_λ is None:
+            print(f'{instance} B={B}: lambda window ({lo}, {hi}) is empty -- '
+                  f'f is not convex at B, so no QUBO row; baselines only')
+            solvers = []
+
+    if curr_λ is not None:
+        opt_nip, opt_qubo = exact_reference(
+            exact_backend, di_g, src_node, tgt_node, B, curr_λ,
+            max_exact_vars)
+        row.update({'lambda': curr_λ, 'Opt_NIP': opt_nip,
+                    'Opt_QUBO': opt_qubo})
 
     for solver in solvers:
         result = ni.qubo_verify_parameters(
@@ -309,17 +404,21 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
 
 
 def parse_case(spec):
-    """Parse a --case argument of the form PATH:BUDGET:LAMBDA."""
+    """
+    Parse a --case argument of the form PATH:BUDGET:LAMBDA, where LAMBDA is
+    a number or `auto`.
+    """
     parts = spec.split(':')
     if len(parts) != 3:
         raise argparse.ArgumentTypeError(
             f"expected PATH:BUDGET:LAMBDA, got {spec!r}")
     path, budget, lam = parts
     try:
-        return path, int(budget), float(lam)
+        return path, int(budget), 'auto' if lam == 'auto' else float(lam)
     except ValueError:
         raise argparse.ArgumentTypeError(
-            f"budget must be an int and lambda a float, got {spec!r}")
+            f"budget must be an int and lambda a float or 'auto', "
+            f"got {spec!r}")
 
 
 def parse_solvers(spec):
@@ -364,7 +463,7 @@ def repo_commit():
         return 'unknown'
 
 
-def provenance_lines(args, solvers, baselines):
+def provenance_lines(args, solvers, baselines, rows=()):
     """
     Comment header for the CSV. network_interdiction_plot.py already reads
     the CSV with comment='#', so these lines are stripped on load.
@@ -382,6 +481,16 @@ def provenance_lines(args, solvers, baselines):
         f"baselines: {', '.join(baselines) if baselines else 'none'}"
         + (f" (seed {args.seed})" if 'random' in baselines else ''),
     ]
+    if any(case[2] == 'auto' for case in args.cases):
+        lines.append(
+            "lambda = auto: the midpoint of the exact window "
+            "(lambda_lo, lambda_hi); see the run_benchmark.py docstring.")
+    empty = [f"{row['instance']} B={row['B']}" for row in rows
+             if row['lambda_lo'] != '' and row['lambda'] == '']
+    if empty:
+        lines.append(
+            f"empty lambda window (f not convex at B), baselines only: "
+            f"{'; '.join(empty)}")
     missing = [s for s in SOLVER_COLUMNS if s not in solvers]
     if missing:
         lines.append(
@@ -445,7 +554,8 @@ def main(argv=None):
         rows.append(run_case(instance, B, curr_λ, args.exact, solvers,
                              args.max_exact_vars, baselines, rng))
 
-    write_csv(args.out, rows, provenance_lines(args, solvers, baselines))
+    write_csv(args.out, rows,
+              provenance_lines(args, solvers, baselines, rows))
     print(f'Wrote {len(rows)} row(s) to {args.out}')
     return 0
 

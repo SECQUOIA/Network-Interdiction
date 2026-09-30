@@ -68,12 +68,12 @@ D-Wave token:
 
 ```
 python run_benchmark.py --exact brute --solvers sa \
-    --case testcases/tiny_a.flow:1:6.0 \
-    --case testcases/tiny_b.flow:1:9.0 \
-    --case testcases/tiny_b.flow:2:6.0 \
-    --case testcases/tiny_c.flow:1:4.5 \
-    --case testcases/tiny_d.flow:1:8.0 \
-    --case testcases/tiny_d.flow:2:6.5 \
+    --case testcases/tiny_a.flow:1:auto \
+    --case testcases/tiny_b.flow:1:auto \
+    --case testcases/tiny_b.flow:2:auto \
+    --case testcases/tiny_c.flow:1:auto \
+    --case testcases/tiny_d.flow:1:auto \
+    --case testcases/tiny_d.flow:2:auto \
     --out results/sample_results_sa.csv
 ```
 
@@ -97,7 +97,7 @@ A real run needs the licensed tools:
 
 ```
 python run_benchmark.py --exact gurobi --solvers sa,qa \
-    --case testcases/50.planarflow:12:36 \
+    --case testcases/50.planarflow:10:auto \
     --out result_dwave_planar.csv
 ```
 
@@ -107,10 +107,16 @@ adds the QPU pass (D-Wave Leap token required). Both are described under
 [Setup](#setup) above.
 
 The third field of each `--case` is the cardinality penalty coefficient, passed
-to `nip_to_qubo()` as `(lambda, lambda+1)`. It is not a free parameter: the
-window of coefficients whose QUBO ground state actually encodes the NIP optimum
-is narrow, and outside it every ratio in the row would be measured against the
-wrong target. `run_benchmark.py` checks that the exact QUBO optimum decodes to
-an optimal interdiction and refuses to write the row otherwise, so a bad
-lambda fails loudly instead of producing a plausible-looking plot. Deriving
-those bounds rather than searching for them is [issue #2](../../issues/2).
+to `nip_to_qubo()` as `(lambda, lambda+1)`. It is not a free parameter: only a
+window of coefficients makes the QUBO ground state the optimal interdiction,
+and outside it every ratio in the row would be measured against the wrong
+target. Write `auto` to have `run_benchmark.py` compute that window exactly
+from the optimal flow at neighbouring budgets and use its midpoint (issue #2;
+the derivation is in the `run_benchmark.py` docstring). The chosen value and
+the window are recorded in the `lambda`, `lambda_lo` and `lambda_hi` columns.
+The window is often only about one unit wide on the benchmark instances, and it
+is empty when the optimal flow is not convex in the budget: then no lambda
+works, and the row keeps the exact optimum and the baselines but no QUBO or
+solver columns. With a hand-picked number instead, `run_benchmark.py` still
+checks that the exact QUBO optimum decodes to an optimal interdiction and
+refuses to write the row otherwise.
