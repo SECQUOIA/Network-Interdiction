@@ -117,8 +117,13 @@ def random_subsets(count, max_size, seed):
 
 # --- partition and ownership -------------------------------------------------
 
-def test_partition_covers_every_node_once_in_connected_pieces():
-    g, _, _ = load_testcase('50.planarflow')
+@pytest.mark.parametrize('name', [
+    '50.planarflow',
+    # Bisection alone leaves all four pieces of this one disconnected.
+    '100_6.2dnnflow',
+])
+def test_partition_covers_every_node_once_in_connected_pieces(name):
+    g, _, _ = load_testcase(name)
     pieces = dc.partition_graph(g, 4)
 
     assert len(pieces) == 4
@@ -132,12 +137,14 @@ def test_partition_covers_every_node_once_in_connected_pieces():
 
 def test_stray_parts_of_a_piece_join_the_neighbour_they_touch_most():
     """
-    On the path 0-1-2-3-4-5, the piece {0, 1, 4} is in two parts; {4}
-    touches only the other piece, so it moves there and both are connected.
+    On the path 0-1-2-3-4 plus a node 5 joined to 2, 3 and 4, the piece
+    {0, 1, 5} is in two parts. The stray part {5} shares two edges with
+    {2, 3} and one with {4}, so it joins {2, 3}.
     """
-    path = nx.path_graph(6)
-    pieces = dc._make_contiguous(path, [{0, 1, 4}, {2, 3, 5}])
-    assert pieces == [{0, 1}, {2, 3, 4, 5}]
+    graph = nx.path_graph(5)
+    graph.add_edges_from([(5, 2), (5, 3), (5, 4)])
+    pieces = dc._make_contiguous(graph, [{0, 1, 5}, {2, 3}, {4}])
+    assert pieces == [{0, 1}, {2, 3, 5}, {4}]
 
 
 def test_arcs_are_owned_by_the_piece_of_their_tail():
@@ -185,6 +192,7 @@ def test_unknown_split_strategy_is_rejected():
 @pytest.mark.parametrize('B, weights, expected', [
     (7, [3, 1], [5, 2]),       # quotas 5.25, 1.75
     (2, [3, 1], [2, 0]),       # tied remainders: the larger weight wins
+    (2, [1, 3], [0, 2]),       # quotas 0.5, 1.5: the tie goes to weight 3
     (1, [2, 2], [1, 0]),       # tied weights too: the lower index wins
     (3, [0, 5, 0], [0, 3, 0]),
     (4, [0, 0], [0, 0]),       # nothing carries flow: nothing to spend on
@@ -274,6 +282,46 @@ def test_piece_owns_exactly_its_useful_arcs():
     assert sorted(sub.graph.nodes()) == list(range(sub.graph.number_of_nodes()))
 
 
+def build_source_behind_bottleneck():
+    """
+    0 --1--> 1 --5--> 2 --5--> 3 with the piece {2, 3}: the source sits
+    inside the rest of the graph, behind the bottleneck (0,1). Max flow 1.
+    Were the source neither pinned to the source side nor kept as a
+    terminal, it would share a class with 1 and the bottleneck would vanish
+    (flow 5).
+    """
+    g = nx.DiGraph()
+    g.add_nodes_from(range(4))
+    for u, v, w in [(0, 1, 1), (1, 2, 5), (2, 3, 5)]:
+        g.add_edge(u, v, weight=w)
+    return g, 0, 3, [{2, 3}, {0, 1}]
+
+
+def build_sink_beside_dead_end():
+    """
+    0 --5--> 1 --5--> 2 --1--> 3, plus a dead end 2 --5--> 4, with the piece
+    {0, 1}: the sink sits inside the rest of the graph. Max flow 1. The dead
+    end 4 reaches no terminal; were the sink neither pinned to the sink side
+    nor kept as a terminal, the two would share a class and (2,4) would
+    count as flow into the sink (flow 5).
+    """
+    g = nx.DiGraph()
+    g.add_nodes_from(range(5))
+    for u, v, w in [(0, 1, 5), (1, 2, 5), (2, 3, 1), (2, 4, 5)]:
+        g.add_edge(u, v, weight=w)
+    return g, 0, 3, [{0, 1}, {2, 3, 4}]
+
+
+@pytest.mark.parametrize('build', [build_source_behind_bottleneck,
+                                   build_sink_beside_dead_end])
+def test_source_and_sink_inside_the_zone_stay_on_their_sides(build):
+    g, src, tgt, pieces = build()
+    assert surviving_flow(g, src, tgt) == 1
+    sub = assert_subproblem_is_exact(g, src, tgt, pieces, 0,
+                                     all_subsets_up_to(2))
+    assert sub.contracted
+
+
 def test_too_many_terminals_skips_the_contraction_but_stays_exact():
     g, src, tgt = load_testcase('50.planarflow')
     pieces = dc.partition_graph(g, 4)
@@ -311,9 +359,20 @@ def test_interdictable_arcs_must_be_in_the_graph():
         ni.nip_to_qubo(1, g, src, tgt, 2.0, 3.0, interdictable=[(3, 0)])
 
 
+# dimod.ExactSolver enumerates all 2**n states, so a regression that bloats a
+# QUBO would exhaust memory rather than fail; past this many variables the
+# exact-sampling tests refuse instead.
+MAX_EXACT_VARIABLES = 20
+
+
+def exact_sample(bqm):
+    assert len(bqm.variables) <= MAX_EXACT_VARIABLES, len(bqm.variables)
+    return dimod.ExactSolver().sample(bqm)
+
+
 def decode(bqm, di_g):
     """The arcs the exact ground state of `bqm` interdicts."""
-    best = dimod.ExactSolver().sample(bqm).first.sample
+    best = exact_sample(bqm).first.sample
     edges = sorted(di_g.edges())
     return [edges[i] for i in range(len(edges))
             if best.get(f'x_{i}', 0) == 1]
@@ -447,7 +506,7 @@ def test_a_piece_may_only_cut_its_own_arcs_within_budget(returned):
 
 def test_qubo_piece_solver_returns_the_ground_state_cut():
     g, src, tgt, pieces = build_four_paths()
-    solver = dc.qubo_piece_solver(2.5, sampler=dimod.ExactSolver().sample)
+    solver = dc.qubo_piece_solver(2.5, sampler=exact_sample)
     sub = dc.piece_subproblem(g, src, tgt, pieces, 1)
     assert solver(sub, 1) == [(4, 5)]
 
@@ -462,7 +521,7 @@ def test_qubo_piece_solver_repairs_samples_within_the_piece():
     sub = dc.piece_subproblem(g, src, tgt, pieces, 1)
     assert len(decode(dc.piece_qubo(sub, 1, 0.5), sub.graph)) == 2
 
-    solver = dc.qubo_piece_solver(0.5, sampler=dimod.ExactSolver().sample)
+    solver = dc.qubo_piece_solver(0.5, sampler=exact_sample)
     assert solver(sub, 1) == [(4, 5)]
 
 
