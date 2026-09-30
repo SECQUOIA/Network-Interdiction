@@ -169,3 +169,20 @@ def test_a_slide_instance_has_an_empty_window():
     lo, hi = rb.lambda_window(curve, 10)
     assert (lo, hi) == (36.5, 36.0)
     assert rb.choose_lambda(lo, hi) is None
+
+
+def test_gurobi_objective_noise_is_rounded_away(monkeypatch):
+    """
+    Capacities are integers, so f(k) is too; a MIP objective within solver
+    tolerance of an integer (12.000000001, or 1e-10 for zero) must not leak
+    into the window's difference quotients or defeat the curve's stop at its
+    first zero. Gurobi returns exact values on the instances tested so far,
+    so this pins the contract with a stub instead.
+    """
+    noisy = {0: 25.000000001, 1: 12.999999999, 2: 1e-10}
+    monkeypatch.setattr(ni, 'solve_nip_gurobi',
+                        lambda g, s, t, k: (noisy.get(k, 0.0), []))
+    g, src, tgt = ni.read_flow_file(tiny('tiny_b'))
+
+    assert rb.nip_optimum('gurobi', g, src, tgt, 0) == 25
+    assert rb.optimum_curve('gurobi', g, src, tgt, 1) == [25, 13, 0]
