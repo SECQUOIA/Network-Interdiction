@@ -45,13 +45,20 @@ def load(row):
     return ni.read_flow_file(os.path.join(REPO_ROOT, row['instance']))
 
 
-def require_gurobi():
+def require_unrestricted_gurobi():
+    """
+    Skip unless Gurobi can solve a model larger than the size-limited
+    license that ships with pip's gurobipy (as in CI). An empty-model check
+    passes under that license, but the slide instances exceed it.
+    """
     try:
-        m = gurobipy.Model('license-check')
+        m = gurobipy.Model('license-capacity-check')
         m.setParam('OutputFlag', 0)
+        x = m.addVars(5000, vtype=gurobipy.GRB.BINARY)
+        m.setObjective(x.sum(), gurobipy.GRB.MAXIMIZE)
         m.optimize()
     except gurobipy.GurobiError as e:
-        pytest.skip(f'no usable Gurobi license in this environment: {e}')
+        pytest.skip(f'no unrestricted Gurobi license in this environment: {e}')
 
 
 def test_covers_exactly_the_slide_cases(slides):
@@ -97,7 +104,7 @@ def test_greedy_column_reproduces(slides, instance, B):
 
 def test_exact_columns_and_windows_reproduce(slides):
     """Every row's optimum and lambda window, recomputed with Gurobi."""
-    require_gurobi()
+    require_unrestricted_gurobi()
     for _, row in slides.iterrows():
         g, src, tgt = load(row)
         B = int(row['B'])

@@ -29,6 +29,22 @@ def require_gurobi():
         pytest.skip(f'no usable Gurobi license in this environment: {e}')
 
 
+def require_unrestricted_gurobi():
+    """
+    Skip unless Gurobi can solve a model larger than the size-limited
+    license that ships with pip's gurobipy (as in CI). An empty-model check
+    passes under that license, but the slide instances exceed it.
+    """
+    try:
+        m = gurobipy.Model('license-capacity-check')
+        m.setParam('OutputFlag', 0)
+        x = m.addVars(5000, vtype=gurobipy.GRB.BINARY)
+        m.setObjective(x.sum(), gurobipy.GRB.MAXIMIZE)
+        m.optimize()
+    except gurobipy.GurobiError as e:
+        pytest.skip(f'no unrestricted Gurobi license in this environment: {e}')
+
+
 # Windows predicted by Proposition 3 for the six sample rows. These match
 # the ranges found by sweeping lambda against dimod.ExactSolver when the
 # sample was first generated (Table 1 of mfnip-qubo-research-notes).
@@ -162,7 +178,7 @@ def test_a_slide_instance_has_an_empty_window():
     so the lower end 36.5 exceeds the upper end 36. No lambda makes the
     linear-penalty QUBO's ground state the optimum for that row.
     """
-    require_gurobi()
+    require_unrestricted_gurobi()
     g, src, tgt = ni.read_flow_file(
         os.path.join(REPO_ROOT, 'testcases', '90_0.1.erdosflow'))
     curve = rb.optimum_curve('gurobi', g, src, tgt, 10)
