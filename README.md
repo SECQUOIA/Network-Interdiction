@@ -61,6 +61,15 @@ writes `sample_results_sa_flow_reduction.pdf` and
 `QA_*` columns are empty, and a solver whose columns are empty is skipped
 rather than drawn as empty bars.
 
+[results/slide_instances_sa.csv](results/slide_instances_sa.csv) is the
+same comparison on the nine instances behind the D-Wave slides (the original
+D-Wave results were not stored), with Gurobi's optimum, simulated annealing,
+and both baselines; the D-Wave column is empty. Its header records the exact
+command that produced it. On those instances annealing followed by greedy
+repair never beats plain greedy, and plain greedy reproduces the repaired
+values reported on the slides, which were produced by a version of the repair
+that ignored the annealer's sample (#12).
+
 ### Regenerating the results CSV
 
 The sample is reproducible on any machine, with no Gurobi license and no
