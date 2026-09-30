@@ -1,142 +1,208 @@
-import pandas
+"""
+Plot the benchmark results CSV produced by run_benchmark.py (issue #6).
+
+Draws two figures per run:
+
+  <stem>_flow_reduction.pdf  flow reduction achieved by each annealing
+                             solver, relative to the exact optimum
+  <stem>_qubo_energy.pdf     QUBO energy reached by each annealing solver,
+                             relative to the exact QUBO ground state
+
+where <stem> is the input CSV's file name without its extension, so
+`--csv result_dwave_planar.csv` still writes the result_dwave_planar_*.pdf
+names this script has always written.
+
+This used to read a hard-coded `result_dwave_planar.csv` that was not checked
+in and had no generating script, so the script could not be run at all. It now
+defaults to the small checked-in sample and takes any CSV via --csv. A solver
+whose columns are empty (typically QA, which needs a D-Wave QPU) is skipped
+instead of drawing empty bars.
+"""
+import argparse
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas
 
-import dwave_networkx as dnx
-import networkx as nx
+DEFAULT_CSV = os.path.join('results', 'sample_results_sa.csv')
 
-from networkx.algorithms import isomorphism
+# Columns every row needs, whichever solvers were run.
+REQUIRED_COLUMNS = ['V', 'E', 'B', 'Opt_NIP', 'Opt_QUBO', 'maxflow']
 
-# G  = dnx.zephyr_graph(12)
-# square_no_periodic = nx.grid_graph(dim=(4,4), periodic=[True,False])
+# label -> (objective column, greedy-repaired objective column, energy column)
+SOLVERS = {
+    'SA': ('SA_NIP', 'SA_NIP_Greedy', 'SA_QUBO'),
+    'QA': ('QA_NIP(advantage1)', 'QA_NIP(advantage1)_Greedy',
+           'QA_QUBO(advantage1)'),
+}
 
-# GM = isomorphism.GraphMatcher(G, square_no_periodic)
-# print(GM.subgraph_is_isomorphic())
-# exit()
+# Plotting order, and the colour each series has always been drawn in.
+SERIES_COLORS = {
+    'QA': '#99aab5',
+    'SA': '#007aff',
+    'QA-Greedy': '#5ac8fa',
+    'SA-Greedy': '#ff3b30',
+}
 
-
-csv_file = pandas.read_csv('result_dwave_planar.csv', comment='#')
-
-col_V = list(csv_file['V'])
-col_E = list(csv_file['E'])
-col_B = list(csv_file['B'])
-
-col_opt_nip = list(csv_file['Opt_NIP'])
-col_opt_qubo = list(csv_file['Opt_QUBO'])
-
-col_sa_nip = list(csv_file['SA_NIP'])
-col_sa_nip_greedy = list(csv_file['SA_NIP_Greedy'])
-col_sa_qubo = list(csv_file['SA_QUBO'])
-
-col_qa_nip = list(csv_file['QA_NIP(advantage1)'])
-col_qa_nip_greedy = list(csv_file['QA_NIP(advantage1)_Greedy'])
-col_qa_qubo = list(csv_file['QA_QUBO(advantage1)'])
-
-col_maxflow = list(csv_file['maxflow'])
-
-num_entries = len(col_V)
-num_vars = []
-x_labels = []
-flow_reduction_sa = []
-flow_reduction_sa_greedy = []
-flow_reduction_qa = []
-flow_reduction_qa_greedy = []
-flow_reduction_opt = []
-sa_energy = []
-qa_energy = []
-
-for i in range(num_entries):
-    num_vars.append(col_V[i] + 3*col_E[i])
-    x_labels.append(f"{num_vars[-1]} ({col_B[i]})")
-    curr_flow_reduction_opt = (col_maxflow[i] - col_opt_nip[i]) / col_maxflow[i]
-    if col_sa_nip[i] == 0:
-        flow_reduction_sa.append(0)
-    else:
-        flow_reduction_sa.append((col_maxflow[i] - col_sa_nip[i]) / col_maxflow[i] / curr_flow_reduction_opt)
-    flow_reduction_sa_greedy.append((col_maxflow[i] - col_sa_nip_greedy[i]) / col_maxflow[i] / curr_flow_reduction_opt)
-    # flow_reduction_opt.append((col_maxflow[i] - col_opt_nip[i]) / col_maxflow[i])
-    if col_qa_nip[i] == 0:
-        flow_reduction_qa.append(0)
-    else:
-        flow_reduction_qa.append((col_maxflow[i] - col_qa_nip[i]) / col_maxflow[i] / curr_flow_reduction_opt)
-    flow_reduction_qa_greedy.append((col_maxflow[i] - col_qa_nip_greedy[i]) / col_maxflow[i] / curr_flow_reduction_opt)
-
-    sa_energy.append(col_sa_qubo[i] / col_opt_qubo[i])
-    qa_energy.append(col_qa_qubo[i] / col_opt_qubo[i])
-
-    # relative_error.append(col_opt[i] / col_QUBO[i])
-
-plt.figure(figsize=(12, 8))
-plt.tight_layout()
-ax1 = plt.subplot(1, 1, 1)
-barWidth = 0.25
-r1 = np.arange(len(flow_reduction_sa)) * 1.5
-r2 = [x + barWidth for x in r1]
-r3 = [x + barWidth for x in r2]
-r4 = [x + barWidth for x in r3]
-
-x = np.arange(len(flow_reduction_sa))
-plt.tick_params(labelsize=14)
-
-colors=['#99aab5', '#007aff', "#5ac8fa", "#ff3b30", "#ff2d55", "#2c2f33"]
-plt.bar(r1, flow_reduction_qa, width=barWidth, edgecolor='white', label='QA',color=colors[0])
-plt.bar(r2, flow_reduction_sa, width=barWidth, edgecolor='white', label='SA',color=colors[1])
-plt.bar(r3, flow_reduction_qa_greedy, width=barWidth, edgecolor='white', label='QA-Greedy',color=colors[2])
-plt.bar(r4, flow_reduction_sa_greedy, width=barWidth, edgecolor='white', label='SA-Greedy',color=colors[3])
-
-plt.axhline(y=1, color='r', linestyle='dotted')
-# plt.bar(r3, flow_reduction_opt, width=barWidth, edgecolor='white', label='OPT',color=colors[2])
-
-# plt.rcParams["figure.figsize"] = (12,8)
-# plt.bar(x_labels, relative_error)
-# plt.title('Comparison between Optimal Solver and QUBO Solver', fontsize=24)
-plt.xticks(fontsize=12)
-plt.yticks(fontsize=14)
-plt.xlabel('#Variables (#Interdicted Edges)', fontsize=20)
-plt.ylabel('Flow Reduction from Maxflow against OPT', fontsize=20)
-plt.xticks([1.5 * r + 0.375 for r in range(len(flow_reduction_qa))], 
-           x_labels, rotation=45)
-plt.legend(prop={'size': 12}, loc='upper left', 
-           ncol=4, fancybox=False, shadow=True)
-plt.tight_layout()
-# plt.ylim((-0.05, 1))
-# plt.yticks([0.8,0.85,0.9,0.95,1])
-plt.ylim((0.0, 1.1))
-plt.savefig('result_dwave_planar_flow_reduction.pdf')
-plt.clf()
-
-###
-
-plt.figure(figsize=(12, 8))
-plt.tight_layout()
-ax1 = plt.subplot(1, 1, 1)
-barWidth = 0.25
-r1 = np.arange(len(flow_reduction_sa)) * 1.5
-r2 = [x + barWidth for x in r1]
-x = np.arange(len(flow_reduction_sa))
-plt.tick_params(labelsize=14)
-
-colors=['#99aab5', '#007aff', "#5ac8fa", "#ff3b30", "#ff2d55", "#2c2f33"]
-plt.bar(r1, qa_energy, width=barWidth, edgecolor='white', label='QA',color=colors[0])
-plt.bar(r2, sa_energy, width=barWidth, edgecolor='white', label='SA',color=colors[1])
+BAR_WIDTH = 0.25
+GROUP_STEP = 1.5
 
 
-# plt.rcParams["figure.figsize"] = (12,8)
-# plt.bar(x_labels, relative_error)
-# plt.title('Comparison between Optimal Solver and QUBO Solver', fontsize=24)
-plt.xticks(fontsize=12)
-plt.yticks(fontsize=14)
-plt.xlabel('#Variables (#Interdicted Edges)', fontsize=20)
-plt.ylabel('QUBO Energy Ratio against OPT', fontsize=20)
-plt.xticks([1.5 * r + 0.15 for r in range(len(flow_reduction_qa))], 
-           x_labels, rotation=45)
-# plt.yticks([0.9,0.95,1])
-plt.legend(prop={'size': 12}, loc='upper left', 
-           ncol=3, fancybox=False, shadow=True)
-plt.tight_layout()
-plt.ylim((0.9, 1.02))
-plt.savefig('result_dwave_planar_qubo_energy.pdf')
+def load_results(csv_path):
+    """Read the results CSV, failing loudly on a CSV the plot cannot use."""
+    frame = pandas.read_csv(csv_path, comment='#')
+    missing = [c for c in REQUIRED_COLUMNS if c not in frame.columns]
+    if missing:
+        raise SystemExit(
+            f"{csv_path} is missing required column(s): {', '.join(missing)}. "
+            f"Generate it with run_benchmark.py (see README).")
+    if frame.empty:
+        raise SystemExit(f"{csv_path} has no data rows.")
+    if (frame['maxflow'] == frame['Opt_NIP']).any():
+        raise SystemExit(
+            f"{csv_path} has a row where the optimum equals maxflow, i.e. the "
+            f"budget buys no flow reduction at all; every ratio plotted here "
+            f"is normalised by that reduction, so there is nothing to plot.")
+    return frame
 
 
+def available_solvers(frame):
+    """
+    Solvers that this CSV actually carries data for.
+
+    A solver's columns are all present-but-empty when that pass was not run
+    (run_benchmark.py leaves them blank rather than writing a sentinel).
+    """
+    present = []
+    for label, columns in SOLVERS.items():
+        if not all(c in frame.columns for c in columns):
+            continue
+        if frame[list(columns)].isna().all(axis=None):
+            continue
+        present.append(label)
+    return present
 
 
+def compute_series(frame, solvers):
+    """
+    Turn the raw columns into the two ratios the figures show.
+
+    flow_reduction is each solver's flow reduction as a fraction of the
+    optimal flow reduction (1.0 = matched the exact optimum); energy_ratio is
+    its QUBO energy as a fraction of the exact ground-state energy.
+    """
+    # Column-wise, not row-wise: iterrows() would upcast these integer counts
+    # to float via the row's mixed dtype and label the axis "16.0 (1.0)".
+    num_vars = frame['V'] + 3 * frame['E']
+    x_labels = [f'{v} ({b})' for v, b in zip(num_vars, frame['B'])]
+
+    optimal_reduction = (frame['maxflow'] - frame['Opt_NIP']) / frame['maxflow']
+
+    flow_reduction = {}
+    energy_ratio = {}
+    for label in solvers:
+        nip_col, greedy_col, qubo_col = SOLVERS[label]
+
+        # A 0 in the raw objective column means "this solver found nothing
+        # usable for this row" -- the original script's convention, kept so
+        # existing CSVs plot the same way. run_benchmark.py writes an empty
+        # cell rather than a 0 for a missing value, precisely because 0 is
+        # taken here to mean something else.
+        reduction = (frame['maxflow'] - frame[nip_col]) / frame['maxflow']
+        flow_reduction[label] = np.where(
+            frame[nip_col] == 0, 0.0, reduction / optimal_reduction)
+
+        greedy_reduction = ((frame['maxflow'] - frame[greedy_col])
+                            / frame['maxflow'])
+        flow_reduction[f'{label}-Greedy'] = (greedy_reduction
+                                             / optimal_reduction).to_numpy()
+
+        energy_ratio[label] = (frame[qubo_col] / frame['Opt_QUBO']).to_numpy()
+
+    return x_labels, flow_reduction, energy_ratio
+
+
+def grouped_bar_positions(num_groups, num_series):
+    """Left edges of each series' bars, plus the group centres for the ticks."""
+    base = np.arange(num_groups) * GROUP_STEP
+    positions = [base + i * BAR_WIDTH for i in range(num_series)]
+    centres = base + BAR_WIDTH * (num_series - 1) / 2
+    return positions, centres
+
+
+def draw(series, x_labels, ylabel, ylim, out_path, reference_line=None):
+    plt.figure(figsize=(12, 8))
+    plt.tight_layout()
+    plt.subplot(1, 1, 1)
+    plt.tick_params(labelsize=14)
+
+    positions, centres = grouped_bar_positions(len(x_labels), len(series))
+    for (label, values), left in zip(series.items(), positions):
+        plt.bar(left, values, width=BAR_WIDTH, edgecolor='white', label=label,
+                color=SERIES_COLORS.get(label))
+
+    if reference_line is not None:
+        plt.axhline(y=reference_line, color='r', linestyle='dotted')
+
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=14)
+    plt.xlabel('#Variables (#Interdicted Edges)', fontsize=20)
+    plt.ylabel(ylabel, fontsize=20)
+    plt.xticks(centres, x_labels, rotation=45)
+    plt.legend(prop={'size': 12}, loc='upper left', ncol=len(series),
+               fancybox=False, shadow=True)
+    plt.tight_layout()
+    plt.ylim(ylim)
+    plt.savefig(out_path)
+    plt.close()
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument(
+        '--csv', default=DEFAULT_CSV,
+        help=f'results CSV from run_benchmark.py (default: {DEFAULT_CSV})')
+    parser.add_argument(
+        '--outdir', default='.',
+        help='directory to write the PDFs into (default: the current one)')
+    args = parser.parse_args(argv)
+
+    frame = load_results(args.csv)
+    solvers = available_solvers(frame)
+    if not solvers:
+        raise SystemExit(
+            f"{args.csv} has no solver results to plot: every SA_*/QA_* column "
+            f"is empty. Re-run run_benchmark.py with --solvers sa and/or qa.")
+
+    x_labels, flow_reduction, energy_ratio = compute_series(frame, solvers)
+
+    os.makedirs(args.outdir, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(args.csv))[0]
+
+    # Keep the original drawing order (QA before SA, plain before greedy) for
+    # whichever solvers are present.
+    flow_series = {label: flow_reduction[label]
+                   for label in SERIES_COLORS if label in flow_reduction}
+    energy_series = {label: energy_ratio[label]
+                     for label in ('QA', 'SA') if label in energy_ratio}
+
+    flow_path = os.path.join(args.outdir, f'{stem}_flow_reduction.pdf')
+    draw(flow_series, x_labels, 'Flow Reduction from Maxflow against OPT',
+         (0.0, 1.1), flow_path, reference_line=1)
+
+    energy_path = os.path.join(args.outdir, f'{stem}_qubo_energy.pdf')
+    draw(energy_series, x_labels, 'QUBO Energy Ratio against OPT',
+         (0.9, 1.02), energy_path)
+
+    print(f'Plotted {len(frame)} row(s) from {args.csv} '
+          f'({", ".join(solvers)}):')
+    print(f'  {flow_path}')
+    print(f'  {energy_path}')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

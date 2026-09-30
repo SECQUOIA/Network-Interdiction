@@ -252,6 +252,16 @@ def solve_nip_gurobi_relaxation(G, src_node, tgt_node, B, λ_min, λ_max):
 
 # add dual constraint to the objective
 def gurobi_verify_parameters(G, src_node, tgt_node, B, λ, β):
+    """
+    Solve the *penalised* (QUBO-shaped) model exactly with Gurobi at
+    coefficients (λ, β), i.e. the same objective nip_to_qubo() encodes.
+
+    Returns (qubo_objective, nip_objective, interdicted_edges), where
+    qubo_objective is Gurobi's optimal value of the penalised objective
+    (the exact QUBO ground-state energy, used as the Opt_QUBO column by
+    run_benchmark.py -- issue #6) and nip_objective is the max flow that
+    survives interdicting those edges. It used to only print these.
+    """
     def compute_objective(di_g, x):
         di_g_copy = di_g.copy()
         edge_counter = 0
@@ -315,6 +325,8 @@ def gurobi_verify_parameters(G, src_node, tgt_node, B, λ, β):
     print(f'NIP Obj is {curr_obj}, Gurobi Objective is {m.ObjVal}')
     print(f"Interdicted edges are: {interdicted_edges}")
     print('----------------------------')
+
+    return m.ObjVal, curr_obj, interdicted_edges
     
 # solve the original NIP MIP
 def solve_nip_gurobi(G, src_node, tgt_node, B):
@@ -1026,6 +1038,26 @@ def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_pen
     return bqm
 
 def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver='sa'):
+    """
+    Build the QUBO for `di_g` at penalty coefficients (curr_λ, curr_λ+1),
+    sample it with `solver` ('sa' = dwave-neal, 'qa' = D-Wave QPU), and
+    report the best solutions found.
+
+    Returns a dict for the 'sa'/'qa' paths (None for any other solver):
+
+        best_energy             lowest QUBO energy in the sampleset
+        best_obj_before_greedy  lowest max-flow objective among the 20
+                                best samples that already respect the
+                                budget, or float('inf') if none of them do
+        best_obj_after_greedy   lowest max-flow objective after
+                                improve_dwave_solution() repairs each
+                                sample to exactly B interdicted edges
+        interdicted_edges       the edge set achieving best_obj_after_greedy
+
+    It used to only print these; run_benchmark.py needs them as values to
+    fill the SA_*/QA_* columns of the results CSV (issue #6). The prints
+    are kept so the existing main() output is unchanged.
+    """
     # decompose qubo samples to variables in our integer program, note: the order of edges is VERY important
     def decompose_dwave_sample(sample):
         num_edges = len(di_g.edges())
@@ -1152,6 +1184,13 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
         print(f'Best objective before greedy improvement: {best_sol_before_greedy}')
         print(f'Best objective after greedy improvement: {best_sol_after_greedy}')
         print(f'Best set of interdicted edges: {best_sol_interdicted_edge}')
+
+        return {
+            'best_energy': best_energies[0],
+            'best_obj_before_greedy': best_sol_before_greedy,
+            'best_obj_after_greedy': best_sol_after_greedy,
+            'interdicted_edges': best_sol_interdicted_edge,
+        }
 
     elif solver == 'qci':
         # NOTE: solve_qubo_via_qci is not imported anywhere in this module
