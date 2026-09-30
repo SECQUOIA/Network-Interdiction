@@ -219,10 +219,12 @@ def local_max_flows(di_g, src_node, tgt_node, pieces):
     with unlimited capacity if the piece holds it; every vertex an arc leaves
     the piece from drains to the super-sink with the total capacity of those
     arcs, as does the sink with unlimited capacity. Arcs into the source and
-    out of the sink carry no s-t flow and are left out. A local max flow is
-    an estimate: it assumes the rest of the graph can supply and absorb
-    whatever the boundary arcs carry, and it goes stale as soon as a
-    neighbouring piece is interdicted.
+    out of the sink carry no s-t flow and are left out, and so are arcs that
+    enter the piece at the sink itself: they cross no arc the piece owns, so
+    the piece could not cut that flow (their tail's piece counts them as its
+    outflow). A local max flow is an estimate: it assumes the rest of the
+    graph can supply and absorb whatever the boundary arcs carry, and it
+    goes stale as soon as a neighbouring piece is interdicted.
     """
     piece_of = _piece_index(di_g, pieces)
     flows = []
@@ -234,6 +236,8 @@ def local_max_flows(di_g, src_node, tgt_node, pieces):
             if v == src_node or u == tgt_node:
                 continue
             inside_u = piece_of[u] == index
+            if v == tgt_node and not inside_u:
+                continue
             inside_v = piece_of[v] == index
             if inside_u and inside_v:
                 local.add_edge(u, v, weight=data['weight'])

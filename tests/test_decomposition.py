@@ -48,8 +48,9 @@ def build_four_paths():
     and two). Local max flows, by hand:
       P0: the source feeds (0,1) 2 and (0,2) 2, and drains to the super-sink
           through (0,3) 2 + (0,4) 5 = 7, (1,5) 5 and (2,5) 5 -> 2+2+7 = 11
-      P1: the super-source feeds 3 with 2, 4 with 5 and the sink with
-          (1,5)+(2,5) = 10 -> min(2,5) + min(5,3) + 10 = 15
+      P1: the super-source feeds 3 with 2 and 4 with 5 -> min(2,5) +
+          min(5,3) = 5. (1,5) and (2,5) enter P1 at the sink itself, so they
+          cross no arc P1 owns: they count for P0, as its outflow, not for P1.
     """
     g = nx.DiGraph()
     g.add_nodes_from(range(6))
@@ -178,9 +179,9 @@ def test_mincut_split_counts_the_min_cut_arcs_each_piece_owns():
 
 def test_local_split_follows_the_local_max_flows():
     g, src, tgt, pieces = build_four_paths()
-    assert dc.local_max_flows(g, src, tgt, pieces) == [11, 15]
-    # quotas 55/26 and 75/26, i.e. 2.12 and 2.88
-    assert dc.split_budget(g, src, tgt, 5, pieces, 'local') == [2, 3]
+    assert dc.local_max_flows(g, src, tgt, pieces) == [11, 5]
+    # quotas 55/16 and 25/16, i.e. 3.44 and 1.56
+    assert dc.split_budget(g, src, tgt, 5, pieces, 'local') == [3, 2]
 
 
 def test_unknown_split_strategy_is_rejected():
