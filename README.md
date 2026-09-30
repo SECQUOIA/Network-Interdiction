@@ -69,7 +69,7 @@ command that produced it. On those instances annealing followed by greedy
 repair never beats plain greedy, and plain greedy reproduces the repaired
 values reported on the slides, which were produced by a version of the repair
 that ignored the annealer's sample (#12).
-[notebooks/slide_results_analysis.ipynb](notebooks/slide_results_analysis.ipynb)
+[notebooks/analysis.ipynb](notebooks/analysis.ipynb)
 walks through that comparison family by family, including the check against the
 slide values and the penalty windows. It reads only the committed CSV, so it
 needs pandas and matplotlib but no Gurobi license or D-Wave token.

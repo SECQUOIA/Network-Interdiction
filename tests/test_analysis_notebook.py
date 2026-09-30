@@ -1,5 +1,5 @@
 """
-Runs notebooks/slide_results_analysis.ipynb's code cells and checks the
+Runs notebooks/analysis.ipynb's code cells and checks the
 numbers it reports against counts computed independently from the raw CSV,
 so the notebook cannot silently drift from the data it describes.
 """
@@ -13,7 +13,7 @@ import pytest
 matplotlib.use('Agg')
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NOTEBOOK = os.path.join(REPO_ROOT, 'notebooks', 'slide_results_analysis.ipynb')
+NOTEBOOK = os.path.join(REPO_ROOT, 'notebooks', 'analysis.ipynb')
 SLIDE_CSV = os.path.join(REPO_ROOT, 'results', 'slide_instances_sa.csv')
 
 
