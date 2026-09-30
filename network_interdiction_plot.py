@@ -4,7 +4,8 @@ Plot the benchmark results CSV produced by run_benchmark.py (issue #6).
 Draws two figures per run:
 
   <stem>_flow_reduction.pdf  flow reduction achieved by each annealing
-                             solver, relative to the exact optimum
+                             solver, and by the classical baselines when the
+                             CSV has them, relative to the exact optimum
   <stem>_qubo_energy.pdf     QUBO energy reached by each annealing solver,
                              relative to the exact QUBO ground state
 
@@ -16,7 +17,8 @@ This used to read a hard-coded `result_dwave_planar.csv` that was not checked
 in and had no generating script, so the script could not be run at all. It now
 defaults to the small checked-in sample and takes any CSV via --csv. A solver
 whose columns are empty (typically QA, which needs a D-Wave QPU) is skipped
-instead of drawing empty bars.
+instead of drawing empty bars. The Greedy / Random_Greedy baseline columns
+(issue #15) are optional, so CSVs written before they existed still plot.
 """
 import argparse
 import os
@@ -37,12 +39,24 @@ SOLVERS = {
            'QA_QUBO(advantage1)'),
 }
 
+# label -> column, for the classical baselines run_benchmark.py writes. These
+# have one number per row (the surviving flow), not the solver triple.
+BASELINES = {
+    'Greedy': 'Greedy',
+    'Random-Greedy': 'Random_Greedy',
+}
+
 # Plotting order, and the colour each series has always been drawn in.
+# Greedy takes the dark grey the original palette defined but never used;
+# Random-Greedy is amber, since the palette's other spare (#ff2d55) is too
+# close to SA-Greedy's red to tell apart.
 SERIES_COLORS = {
     'QA': '#99aab5',
     'SA': '#007aff',
     'QA-Greedy': '#5ac8fa',
     'SA-Greedy': '#ff3b30',
+    'Greedy': '#2c2f33',
+    'Random-Greedy': '#ffcc00',
 }
 
 BAR_WIDTH = 0.25
@@ -84,13 +98,20 @@ def available_solvers(frame):
     return present
 
 
-def compute_series(frame, solvers):
+def available_baselines(frame):
+    """Baseline labels whose column is present and not entirely empty."""
+    return [label for label, column in BASELINES.items()
+            if column in frame.columns and not frame[column].isna().all()]
+
+
+def compute_series(frame, solvers, baselines=()):
     """
     Turn the raw columns into the two ratios the figures show.
 
-    flow_reduction is each solver's flow reduction as a fraction of the
-    optimal flow reduction (1.0 = matched the exact optimum); energy_ratio is
-    its QUBO energy as a fraction of the exact ground-state energy.
+    flow_reduction is each solver's -- and each requested baseline's -- flow
+    reduction as a fraction of the optimal flow reduction (1.0 = matched the
+    exact optimum); energy_ratio is each solver's QUBO energy as a fraction
+    of the exact ground-state energy. Baselines have no energy.
     """
     # Column-wise, not row-wise: iterrows() would upcast these integer counts
     # to float via the row's mixed dtype and label the axis "16.0 (1.0)".
@@ -119,6 +140,13 @@ def compute_series(frame, solvers):
                                              / optimal_reduction).to_numpy()
 
         energy_ratio[label] = (frame[qubo_col] / frame['Opt_QUBO']).to_numpy()
+
+    for label in baselines:
+        # No zero sentinel here: run_benchmark.py always writes a baseline's
+        # real surviving flow, and 0 is a legitimate value for it.
+        column = BASELINES[label]
+        reduction = (frame['maxflow'] - frame[column]) / frame['maxflow']
+        flow_reduction[label] = (reduction / optimal_reduction).to_numpy()
 
     return x_labels, flow_reduction, energy_ratio
 
@@ -172,12 +200,15 @@ def main(argv=None):
 
     frame = load_results(args.csv)
     solvers = available_solvers(frame)
-    if not solvers:
+    baselines = available_baselines(frame)
+    if not solvers and not baselines:
         raise SystemExit(
-            f"{args.csv} has no solver results to plot: every SA_*/QA_* column "
-            f"is empty. Re-run run_benchmark.py with --solvers sa and/or qa.")
+            f"{args.csv} has no results to plot: every SA_*/QA_* and baseline "
+            f"column is empty. Re-run run_benchmark.py with --solvers sa and/or "
+            f"qa, or with --baselines.")
 
-    x_labels, flow_reduction, energy_ratio = compute_series(frame, solvers)
+    x_labels, flow_reduction, energy_ratio = compute_series(
+        frame, solvers, baselines)
 
     os.makedirs(args.outdir, exist_ok=True)
     stem = os.path.splitext(os.path.basename(args.csv))[0]
@@ -193,14 +224,19 @@ def main(argv=None):
     draw(flow_series, x_labels, 'Flow Reduction from Maxflow against OPT',
          (0.0, 1.1), flow_path, reference_line=1)
 
-    energy_path = os.path.join(args.outdir, f'{stem}_qubo_energy.pdf')
-    draw(energy_series, x_labels, 'QUBO Energy Ratio against OPT',
-         (0.9, 1.02), energy_path)
+    written = [flow_path]
+    # Baselines have no QUBO energy, so a baselines-only CSV has no second
+    # figure to draw.
+    if energy_series:
+        energy_path = os.path.join(args.outdir, f'{stem}_qubo_energy.pdf')
+        draw(energy_series, x_labels, 'QUBO Energy Ratio against OPT',
+             (0.9, 1.02), energy_path)
+        written.append(energy_path)
 
     print(f'Plotted {len(frame)} row(s) from {args.csv} '
-          f'({", ".join(solvers)}):')
-    print(f'  {flow_path}')
-    print(f'  {energy_path}')
+          f'({", ".join(solvers + baselines)}):')
+    for path in written:
+        print(f'  {path}')
     return 0
 
 
