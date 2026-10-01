@@ -5,6 +5,7 @@ so the notebook cannot silently drift from the data it describes.
 """
 import json
 import os
+from unittest import mock
 
 import matplotlib
 import pandas
@@ -19,17 +20,25 @@ SLIDE_CSV = os.path.join(REPO_ROOT, 'results', 'slide_instances_sa.csv')
 
 @pytest.fixture(scope='module')
 def namespace():
-    """Execute every code cell in order, from the repo root, and return the
-    resulting globals. Needs no Jupyter kernel."""
+    """
+    Execute every code cell in order, from the repo root, and return the
+    resulting globals. Needs no Jupyter kernel: IPython magics (``%...``
+    lines) are dropped, and plt.savefig is stubbed so a test run does not
+    rewrite the committed figures/.
+    """
     with open(NOTEBOOK, encoding='utf-8') as handle:
         cells = json.load(handle)['cells']
     namespace = {}
     cwd = os.getcwd()
     os.chdir(REPO_ROOT)
     try:
-        for cell in cells:
-            if cell['cell_type'] == 'code':
-                exec(''.join(cell['source']), namespace)
+        with mock.patch('matplotlib.pyplot.savefig'):
+            for cell in cells:
+                if cell['cell_type'] == 'code':
+                    source = ''.join(cell['source']).splitlines()
+                    code = '\n'.join(line for line in source
+                                      if not line.lstrip().startswith('%'))
+                    exec(code, namespace)
     finally:
         os.chdir(cwd)
     return namespace
@@ -78,5 +87,5 @@ def test_slide_repaired_values_match_plain_greedy(namespace):
     """
     cmp = namespace['cmp']
     assert len(cmp) == 27
-    assert cmp['|slide repaired − our Greedy|'].max() <= 0.01
-    assert cmp['|slide repaired − our SA+repair|'].max() > 0.1
+    assert cmp['gap_vs_greedy'].max() <= 0.01
+    assert cmp['gap_vs_sa_repair'].max() > 0.1

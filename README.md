@@ -71,8 +71,10 @@ values reported on the slides, which were produced by a version of the repair
 that ignored the annealer's sample (#12).
 [notebooks/analysis.ipynb](notebooks/analysis.ipynb)
 walks through that comparison family by family, including the check against the
-slide values and the penalty windows. It reads only the committed CSV, so it
-needs pandas and matplotlib but no Gurobi license or D-Wave token.
+slide values and the penalty windows; the plotting helpers it calls live in
+[analysis_utils.py](analysis_utils.py) and its figures are saved to
+[figures/](figures/). It reads only the committed CSV, so it needs pandas and
+matplotlib but no Gurobi license or D-Wave token (one optional cell uses Gurobi).
 
 ### Regenerating the results CSV
 
