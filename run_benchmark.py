@@ -31,6 +31,15 @@ Greedy          surviving flow after interdicting B arcs greedily from an
 Random_Greedy   best surviving flow over 20 random interdictions (each arc
                 cut independently with probability B/E), each repaired to
                 exactly B arcs by the same greedy pass
+*_time_sec      wall time of each method on this row, in seconds, excluding
+                model/QUBO construction: Gurobi_time_sec is Gurobi's Runtime
+                for a dedicated solve (--gurobi-threads threads, default 1, to
+                match the single-threaded SA and greedy); SA_time_sec is the
+                sampler call and SA_repair_time_sec the decode + repair of its
+                20 best samples
+Gurobi_trajectory  JSON list of [seconds, surviving flow] for every incumbent
+                Gurobi found in that dedicated solve (MIPSOL callback); only
+                with --exact gurobi
 
 `instance` and `lambda` are additions to what the plot reads; pandas ignores
 them. The two baseline columns are optional for the plot: it draws them when
@@ -104,9 +113,11 @@ import argparse
 import csv
 import datetime
 import itertools
+import json
 import math
 import subprocess
 import sys
+import time
 
 import dimod
 import networkx as nx
@@ -143,8 +154,13 @@ BASELINE_COLUMNS = {
     'random': 'Random_Greedy',
 }
 
+# Wall time per method, and Gurobi's incumbent trajectory (last: it is long).
+TIME_COLUMNS = ['Gurobi_time_sec', 'SA_time_sec', 'SA_repair_time_sec',
+                'Greedy_time_sec', 'Random_Greedy_time_sec']
+TRAJECTORY_COLUMN = 'Gurobi_trajectory'
+
 CSV_COLUMNS = CSV_COLUMNS[:-1] + list(BASELINE_COLUMNS.values()) + \
-    CSV_COLUMNS[-1:]
+    CSV_COLUMNS[-1:] + TIME_COLUMNS + [TRAJECTORY_COLUMN]
 
 DEFAULT_MAX_EXACT_VARS = 24
 
@@ -342,14 +358,29 @@ def random_greedy(di_g, src_node, tgt_node, B, rng,
     return best
 
 
+def gurobi_trajectory(di_g, src_node, tgt_node, B, threads):
+    """
+    (runtime_sec, JSON trajectory, optimal flow) from a dedicated Gurobi
+    solve with the incumbent-recording callback.
+    """
+    result = ni.solve_nip_gurobi_trajectory(di_g, src_node, tgt_node, B,
+                                            threads=threads)
+    trajectory = json.dumps([[round(t, 6), round(float(flow), 6)]
+                             for t, flow in result['trajectory']])
+    return result['runtime_sec'], trajectory, result['objective']
+
+
 def run_case(instance, B, curr_λ, exact_backend, solvers,
-             max_exact_vars=DEFAULT_MAX_EXACT_VARS, baselines=(), rng=None):
+             max_exact_vars=DEFAULT_MAX_EXACT_VARS, baselines=(), rng=None,
+             sa_seed=None, gurobi_threads=1):
     """
     Compute one CSV row. `instance` is a path to a flow file; `curr_λ` is a
     float or 'auto' (pick it from the exact window, see the module
     docstring); `baselines` is any subset of BASELINE_COLUMNS' keys, and `rng`
     a numpy Generator for the random baseline (a fresh unseeded one if
-    omitted).
+    omitted). `sa_seed` seeds simulated annealing. With the gurobi backend
+    the row also gets Gurobi's runtime and incumbent trajectory from a
+    dedicated solve on `gurobi_threads` threads.
     """
     di_g, src_node, tgt_node = ni.read_flow_file(instance)
 
@@ -379,9 +410,22 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
         row.update({'lambda': curr_λ, 'Opt_NIP': opt_nip,
                     'Opt_QUBO': opt_qubo})
 
+    if exact_backend == 'gurobi':
+        runtime, trajectory, objective = gurobi_trajectory(
+            di_g, src_node, tgt_node, B, gurobi_threads)
+        if round(objective) != round(float(row['Opt_NIP'])):
+            raise ValueError(
+                f'{instance} B={B}: the trajectory solve found {objective}, '
+                f'the exact reference {row["Opt_NIP"]}')
+        row.update({'Gurobi_time_sec': runtime, TRAJECTORY_COLUMN: trajectory})
+
     for solver in solvers:
         result = ni.qubo_verify_parameters(
-            str(instance), di_g, curr_λ, src_node, tgt_node, B, solver=solver)
+            str(instance), di_g, curr_λ, src_node, tgt_node, B, solver=solver,
+            seed=sa_seed)
+        if solver == 'sa':
+            row['SA_time_sec'] = result['sample_time_sec']
+            row['SA_repair_time_sec'] = result['postprocess_time_sec']
         nip_col, greedy_col, qubo_col = SOLVER_COLUMNS[solver]
         before = result['best_obj_before_greedy']
         # inf means not one of the 20 best samples stayed inside the budget.
@@ -393,12 +437,16 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
         row[qubo_col] = result['best_energy']
 
     if 'greedy' in baselines:
+        start = time.perf_counter()
         row[BASELINE_COLUMNS['greedy']] = greedy_from_scratch(
             di_g, src_node, tgt_node, B)
+        row['Greedy_time_sec'] = time.perf_counter() - start
     if 'random' in baselines:
+        start = time.perf_counter()
         row[BASELINE_COLUMNS['random']] = random_greedy(
             di_g, src_node, tgt_node, B,
             rng if rng is not None else np.random.default_rng())
+        row['Random_Greedy_time_sec'] = time.perf_counter() - start
 
     return row
 
@@ -481,6 +529,10 @@ def provenance_lines(args, solvers, baselines, rows=()):
         f"baselines: {', '.join(baselines) if baselines else 'none'}"
         + (f" (seed {args.seed})" if 'random' in baselines else ''),
     ]
+    if 'sa' in solvers:
+        lines.append(f"simulated annealing seed: {args.seed}")
+    if args.exact == 'gurobi':
+        lines.append(f"Gurobi trajectory solve threads: {args.gurobi_threads}")
     if any(case[2] == 'auto' for case in args.cases):
         lines.append(
             "lambda = auto: the midpoint of the exact window "
@@ -531,7 +583,12 @@ def main(argv=None):
              "'none' (default: greedy,random)")
     parser.add_argument(
         '--seed', type=int, default=0,
-        help='seed for the random baseline (default: 0)')
+        help='seed for simulated annealing and the random baseline '
+             '(default: 0)')
+    parser.add_argument(
+        '--gurobi-threads', type=int, default=1,
+        help="Threads for the timed Gurobi trajectory solve (default: 1, to "
+             "match the single-threaded SA and greedy; 0 = Gurobi's default)")
     parser.add_argument(
         '--max-exact-vars', type=int, default=DEFAULT_MAX_EXACT_VARS,
         help='refuse --exact brute past this many QUBO variables '
@@ -552,7 +609,9 @@ def main(argv=None):
     for instance, B, curr_λ in args.cases:
         print(f'=== {instance} B={B} lambda={curr_λ} ===')
         rows.append(run_case(instance, B, curr_λ, args.exact, solvers,
-                             args.max_exact_vars, baselines, rng))
+                             args.max_exact_vars, baselines, rng,
+                             sa_seed=args.seed,
+                             gurobi_threads=args.gurobi_threads or None))
 
     write_csv(args.out, rows,
               provenance_lines(args, solvers, baselines, rows))
