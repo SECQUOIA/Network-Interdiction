@@ -113,3 +113,21 @@ def test_exact_columns_and_windows_reproduce(slides):
         lo, hi = rb.lambda_window(curve, B)
         assert lo == pytest.approx(row['lambda_lo']), row['instance']
         assert hi == pytest.approx(row['lambda_hi']), row['instance']
+
+
+def test_every_row_has_a_trajectory_ending_at_its_optimum(slides):
+    """
+    Gurobi's recorded incumbents (MIPSOL callback) must reach the row's
+    optimum, in time order, within Gurobi's reported runtime, and every
+    method has a recorded time on every row it ran on.
+    """
+    import json
+    for _, row in slides.iterrows():
+        trajectory = json.loads(row['Gurobi_trajectory'])
+        times = [t for t, _ in trajectory]
+        assert times == sorted(times), row['instance']
+        assert times[-1] <= row['Gurobi_time_sec'] + 1e-9, row['instance']
+        assert min(flow for _, flow in trajectory) == row['Opt_NIP'], row['instance']
+        assert row['Greedy_time_sec'] > 0 and row['Random_Greedy_time_sec'] > 0
+        if pandas.notna(row['SA_NIP_Greedy']):
+            assert row['SA_time_sec'] > 0 and row['SA_repair_time_sec'] > 0
