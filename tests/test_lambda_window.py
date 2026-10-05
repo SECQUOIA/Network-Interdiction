@@ -155,8 +155,8 @@ def test_cli_header_names_the_empty_window_rows(tmp_path):
 
     text = out.read_text()
     assert '# lambda = auto:' in text
-    assert f'empty lambda window (f not convex at B), baselines only: ' \
-           f'{instance} B=1' in text
+    assert f'empty strict lambda window, baselines only: ' \
+           f'{instance} B=1 (tied budgets)' in text
 
     frame = pandas.read_csv(out, comment='#')
     assert frame.loc[0, 'lambda'] == 10.0

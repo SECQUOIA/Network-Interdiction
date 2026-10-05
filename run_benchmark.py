@@ -90,10 +90,12 @@ interdicts exactly B arcs and attains f(B) if and only if
 always safe, Proposition 2). Writing `auto` for the lambda field of a --case
 computes f with the --exact backend -- f(0..B) plus f(k) for k > B up to its
 first zero, past which no k can tighten the lower end -- and uses the
-midpoint of that window. The window is empty exactly when f is not convex at
-B; then no lambda makes this QUBO's ground state the answer, so the row keeps
-the exact optimum and the baselines but leaves lambda, Opt_QUBO and the
-solver columns blank rather than scoring a solver against the wrong target.
+midpoint of that window. A strict window exists only when B is a vertex of
+the lower convex envelope of f. If lo > hi, B lies above that envelope; if
+lo == hi, other cut counts tie at the only candidate lambda, even when f is
+convex (for example f = [10, 5, 0] at B = 1). Neither case forces every
+ground state to use exactly B cuts, so the row keeps the exact optimum and
+the baselines but leaves lambda, Opt_QUBO and the solver columns blank.
 
 Examples
 --------
@@ -399,8 +401,10 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
         row.update({'lambda_lo': lo, 'lambda_hi': hi, 'Opt_NIP': curve[B]})
         curr_λ = choose_lambda(lo, hi)
         if curr_λ is None:
+            reason = ('tied budgets' if lo == hi else
+                      'B above the lower convex envelope')
             print(f'{instance} B={B}: lambda window ({lo}, {hi}) is empty -- '
-                  f'f is not convex at B, so no QUBO row; baselines only')
+                  f'{reason}, so no QUBO row; baselines only')
             solvers = []
 
     if curr_λ is not None:
@@ -537,11 +541,14 @@ def provenance_lines(args, solvers, baselines, rows=()):
         lines.append(
             "lambda = auto: the midpoint of the exact window "
             "(lambda_lo, lambda_hi); see the run_benchmark.py docstring.")
-    empty = [f"{row['instance']} B={row['B']}" for row in rows
+    empty = [f"{row['instance']} B={row['B']} ("
+             + ('tied budgets' if row['lambda_lo'] == row['lambda_hi'] else
+                'B above the lower convex envelope') + ')'
+             for row in rows
              if row['lambda_lo'] != '' and row['lambda'] == '']
     if empty:
         lines.append(
-            f"empty lambda window (f not convex at B), baselines only: "
+            f"empty strict lambda window, baselines only: "
             f"{'; '.join(empty)}")
     missing = [s for s in SOLVER_COLUMNS if s not in solvers]
     if missing:

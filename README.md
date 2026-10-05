@@ -129,9 +129,11 @@ target. Write `auto` to have `run_benchmark.py` compute that window exactly
 from the optimal flow at neighbouring budgets and use its midpoint (issue #2;
 the derivation is in the `run_benchmark.py` docstring). The chosen value and
 the window are recorded in the `lambda`, `lambda_lo` and `lambda_hi` columns.
-The window is often only about one unit wide on the benchmark instances, and it
-is empty when the optimal flow is not convex in the budget: then no lambda
-works, and the row keeps the exact optimum and the baselines but no QUBO or
-solver columns. With a hand-picked number instead, `run_benchmark.py` still
-checks that the exact QUBO optimum decodes to an optimal interdiction and
-refuses to write the row otherwise.
+The window is often only about one unit wide on the benchmark instances. It
+has no strict interior when `lambda_lo > lambda_hi` (the budget lies above
+the lower convex envelope of optimal flow) or `lambda_lo == lambda_hi`
+(other cut counts tie at the only candidate lambda, even for a convex flow
+curve). Neither case guarantees exactly B cuts, so the row keeps the exact
+optimum and the baselines but no QUBO or solver columns. With a hand-picked
+number instead, `run_benchmark.py` still checks that the exact QUBO optimum
+decodes to an optimal interdiction and refuses to write the row otherwise.
