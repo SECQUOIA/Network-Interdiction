@@ -46,16 +46,13 @@ def cost_operator(problem):
 
 class QiskitBackend:
     """
-    The QAOA circuit for one problem and depth, simulated with Aer.
-
-    `estimator` defaults to Aer's EstimatorV2; any V2 estimator that accepts
-    this circuit can be passed instead (an IBM device would also need the
-    circuit transpiled to its ISA, #17). Sampling uses Aer's SamplerV2,
-    seeded per call.
+    The QAOA circuit for one problem and depth, simulated with Aer's V2
+    primitives (an IBM device would need runtime primitives and the circuit
+    transpiled to its ISA, #17).
     """
     name = 'qiskit'
 
-    def __init__(self, problem, reps, estimator=None):
+    def __init__(self, problem, reps):
         self.problem = problem
         self.reps = reps
         self.operator = cost_operator(problem)
@@ -70,7 +67,7 @@ class QiskitBackend:
             raise RuntimeError(f'unexpected qaoa_ansatz parameters {names}')
         self.circuit = transpile(ansatz, basis_gates=BASIS_GATES,
                                  optimization_level=0)
-        self.estimator = estimator if estimator is not None else EstimatorV2()
+        self.estimator = EstimatorV2()
         self.simulator = AerSimulator(method='statevector')
 
     def normalized_expectation(self, theta):
