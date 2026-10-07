@@ -16,3 +16,4 @@ dwave-samplers>=1.0.0
 minorminer>=0.2.13
 dwave-networkx>=0.8.15
 pandas>=2.1         # only used by network_interdiction_plot.py
+scipy>=1.10         # COBYLA for the QAOA angles (qaoa_common.py); dwave-system already pulls it in

@@ -24,4 +24,26 @@ jobs:
         # ever added as a repo secret, wire it in here via the standard
         # GRB_WLSACCESSID / GRB_WLSSECRET / GRB_LICENSEID env vars and
         # those tests will start actually running instead of skipping.
+        # The QAOA backend tests skip here too (no Qiskit or CUDA-Q); the
+        # qaoa job below runs them.
         run: python -m pytest tests/ -v
+
+  qaoa:
+    # The gate-model QAOA backends (requirements-qaoa.txt) are optional and
+    # heavy, so they get their own job instead of slowing down pytest above.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-qaoa.txt pytest
+      - name: Run QAOA tests
+        # Makes a missing backend an error rather than a skip, so this job
+        # cannot pass without exercising both backends.
+        env:
+          REQUIRE_QAOA_BACKENDS: '1'
+        run: python -m pytest tests/test_qaoa.py -v -ra
