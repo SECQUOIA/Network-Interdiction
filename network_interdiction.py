@@ -8,6 +8,7 @@ import subprocess
 import matplotlib.pyplot as plt
 import solve_qubo_via_dwave
 import random
+import time
 from pyqubo import Binary
 
 def read_flow_file(filename):
@@ -328,8 +329,12 @@ def gurobi_verify_parameters(G, src_node, tgt_node, B, λ, β):
 
     return m.ObjVal, curr_obj, interdicted_edges
     
-# solve the original NIP MIP
-def solve_nip_gurobi(G, src_node, tgt_node, B):
+def _build_nip_milp(G, src_node, tgt_node, B):
+    """
+    The single-level NIP MILP (Wood 1993): min sum u(1-x)gamma subject to the
+    min-cut constraints and sum(x) <= B. Returns (model, x) with the model
+    not yet optimized; OutputFlag is 0.
+    """
     m = Model("NIP")
 
     m.setParam('OutputFlag', 0)
@@ -359,6 +364,13 @@ def solve_nip_gurobi(G, src_node, tgt_node, B):
     # pi_t - pi_s <= -1
     m.addConstr(pi[tgt_node] - pi[src_node] <= -1)
 
+    return m, x
+
+
+# solve the original NIP MIP
+def solve_nip_gurobi(G, src_node, tgt_node, B):
+    m, x = _build_nip_milp(G, src_node, tgt_node, B)
+
     # Solve the model
     m.optimize()
 
@@ -375,6 +387,62 @@ def solve_nip_gurobi(G, src_node, tgt_node, B):
     print('----------------------------')
 
     return m.ObjVal, interdicted_edges
+
+
+def solve_nip_gurobi_trajectory(G, src_node, tgt_node, B, threads=None):
+    """
+    Solve the NIP MILP with a MIPSOL callback that records every incumbent,
+    following the incumbent-trajectory callback in the quantum-preconditioning
+    repository (qp_gurobi/solve.py).
+
+    Each incumbent is scored the way every other method in the benchmark is:
+    by the true max flow that survives cutting its interdicted arcs. (The
+    MILP objective of an incumbent is the capacity of the cut Gurobi pairs
+    with it, which can exceed that flow until the cut is optimal.) The
+    callback only stores the incumbent's arcs; the max flows are computed
+    after the solve so they do not slow Gurobi down or distort its clock.
+
+    Returns a dict with
+        objective         optimal surviving flow (Gurobi's ObjVal)
+        interdicted_edges the optimal arc set
+        runtime_sec       Gurobi's Runtime (excludes building the model)
+        trajectory        [(seconds, surviving flow), ...] for every
+                          incumbent, in the order Gurobi found them. If
+                          Gurobi reports no MIPSOL event, one point at
+                          runtime_sec with the final solution.
+
+    ``threads`` sets Gurobi's Threads parameter (all cores when None).
+    """
+    m, x = _build_nip_milp(G, src_node, tgt_node, B)
+    if threads is not None:
+        m.setParam('Threads', int(threads))
+    edges = list(G.edges())
+    incumbents = []  # (seconds, interdicted arcs)
+
+    def _cb(model, where):
+        """Record each new incumbent's time and interdicted arcs."""
+        if where == GRB.Callback.MIPSOL:
+            t = float(model.cbGet(GRB.Callback.RUNTIME))
+            values = model.cbGetSolution([x[e] for e in edges])
+            incumbents.append((t, [e for e, v in zip(edges, values) if v > 0.5]))
+
+    m.optimize(_cb)
+
+    interdicted_edges = [e for e in edges if x[e].X > 0.5]
+    if not incumbents:
+        incumbents.append((float(m.Runtime), interdicted_edges))
+
+    def surviving_flow(cut):
+        g_copy = G.copy()
+        g_copy.remove_edges_from(cut)
+        return nx.maximum_flow(g_copy, src_node, tgt_node, capacity='weight')[0]
+
+    return {
+        'objective': m.ObjVal,
+        'interdicted_edges': interdicted_edges,
+        'runtime_sec': float(m.Runtime),
+        'trajectory': [(t, surviving_flow(cut)) for t, cut in incumbents],
+    }
 
 def improve_dwave_solution(di_g, x, src_node, tgt_node, B):
     """
@@ -1037,7 +1105,7 @@ def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_pen
     bqm = model.to_bqm()
     return bqm
 
-def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver='sa'):
+def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver='sa', seed=None):
     """
     Build the QUBO for `di_g` at penalty coefficients (curr_λ, curr_λ+1),
     sample it with `solver` ('sa' = dwave-neal, 'qa' = D-Wave QPU), and
@@ -1053,6 +1121,13 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
                                 improve_dwave_solution() repairs each
                                 sample to exactly B interdicted edges
         interdicted_edges       the edge set achieving best_obj_after_greedy
+        sample_time_sec         wall time of the sampler call alone
+        postprocess_time_sec    wall time to decode, evaluate and repair the
+                                20 best samples
+
+    ``seed`` is passed to the simulated-annealing sampler (ignored for 'qa').
+    Neither time includes building the QUBO, matching Gurobi's Runtime,
+    which excludes building the model.
 
     It used to only print these; run_benchmark.py needs them as values to
     fill the SA_*/QA_* columns of the results CSV (issue #6). The prints
@@ -1128,7 +1203,10 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
     
     if solver == 'sa' or solver == 'qa':
         bqm = nip_to_qubo(B, di_g, src_node, tgt_node, curr_λ, curr_λ+1)
-        sampleset = solve_qubo_via_dwave.solve_bqm_dwave(bqm, solver)
+        sample_start = time.perf_counter()
+        sampleset = solve_qubo_via_dwave.solve_bqm_dwave(bqm, solver, seed=seed)
+        sample_time_sec = time.perf_counter() - sample_start
+        postprocess_start = time.perf_counter()
         records = sampleset.record
         records = sorted(records, key=lambda x:x[1])
         variable_labels = sampleset.variables
@@ -1180,6 +1258,7 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
                 best_sol_after_greedy = objective_improved
                 best_sol_interdicted_edge = interdicted_edges_improved
 
+        postprocess_time_sec = time.perf_counter() - postprocess_start
         print(f'Best energy: {best_energies[0]}')
         print(f'Best objective before greedy improvement: {best_sol_before_greedy}')
         print(f'Best objective after greedy improvement: {best_sol_after_greedy}')
@@ -1190,6 +1269,8 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
             'best_obj_before_greedy': best_sol_before_greedy,
             'best_obj_after_greedy': best_sol_after_greedy,
             'interdicted_edges': best_sol_interdicted_edge,
+            'sample_time_sec': sample_time_sec,
+            'postprocess_time_sec': postprocess_time_sec,
         }
 
     elif solver == 'qci':
