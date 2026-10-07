@@ -109,7 +109,7 @@ Limits:
 
 - Statevector simulation of the full `V + 3E - 2`-qubit QUBO caps this at
   24 qubits, which means the `tiny_*` instances (14 to 22 qubits).
-- CUDA-Q's CPU simulator (`qpp-cpu`) is much slower than Aer: about half a
+- CUDA-Q's CPU simulator (`qpp-cpu`) is much slower than Aer: 0.3 to 1
   second per evaluation at 14 qubits, against milliseconds for Aer. It is
   faster with `OMP_NUM_THREADS=1` at these sizes. On a GPU, pass
   `--target nvidia`.
