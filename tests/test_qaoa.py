@@ -22,6 +22,7 @@ import os
 
 import dimod
 import numpy as np
+import pandas
 import pytest
 
 import qaoa_common as qc
@@ -277,6 +278,34 @@ def test_command_line_writes_json(name, tmp_path, capsys):
     assert result['num_qubits'] == 14
     assert result['opt_nip'] == 5
     assert result['lam'] == 7.5
+
+
+def test_benchmark_rows_and_transfer_columns(tmp_path):
+    backend_module('qiskit')
+    import run_qaoa_benchmark
+
+    out = tmp_path / 'qaoa.csv'
+    assert run_qaoa_benchmark.main([
+        '--reps', '1', '--case', f'{TINY_A}:1', '--case', f'{TINY_A}:2',
+        '--maxiter', '20', '--shots', '200', '--out', str(out)]) == 0
+    assert '# transfer donor: ' in out.read_text()
+    frame = pandas.read_csv(out, comment='#')
+    assert list(frame.columns) == run_qaoa_benchmark.CSV_COLUMNS
+    assert list(frame['B']) == [1, 2]
+    donor, other = frame.iloc[0], frame.iloc[1]
+    assert math.isnan(donor['transfer_p_optimal'])
+
+    # The trained columns score this case's own angles, the transfer columns
+    # the donor's, both on this case. theta is stored to 6 decimals.
+    problem = qc.build_problem(TINY_A, 2)
+    own = reference_probabilities(problem, json.loads(other['theta']))
+    donated = reference_probabilities(problem, json.loads(donor['theta']))
+    mask = problem.optimal_mask()
+    assert other['p_optimal'] == pytest.approx(own[mask].sum(), abs=1e-5)
+    assert other['transfer_p_optimal'] == pytest.approx(donated[mask].sum(),
+                                                        abs=1e-5)
+    assert other['transfer_p_optimal'] != pytest.approx(other['p_optimal'],
+                                                        abs=1e-3)
 
 
 @pytest.mark.parametrize('name', BACKENDS)
