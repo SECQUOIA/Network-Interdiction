@@ -98,6 +98,18 @@ result. Lambda is `auto` by default: the midpoint of its exact window, as
 in `run_benchmark.py`. A budget with an empty window is refused, because no
 lambda makes the ground state the answer.
 
+[run_qaoa_benchmark.py](run_qaoa_benchmark.py) runs depths p = 1, 2, 3 over
+the six rows of `results/sample_results_sa.csv` and writes
+[results/qaoa_tiny.csv](results/qaoa_tiny.csv); its docstring has the exact
+command. It also scores the angles trained on the first row, reused unchanged
+on every other row, which is the baseline for parameter transfer (#16). The
+QAOA section of [notebooks/analysis.ipynb](notebooks/analysis.ipynb) puts
+these results next to simulated annealing and greedy. A rerun is close to the
+committed file but not bit-identical: Aer's multithreaded simulation can sum
+in a different order, so COBYLA can end a few 1e-5 away in the angles. In two
+runs, the exact scores agreed to 1e-5 and the shot estimates of P(optimal) to
+0.02.
+
 The two backends prepare the same state for the same angles, and the tests
 check both against an independent numpy simulation. The angles are ordered
 `[beta..., gamma...]`, the order of Qiskit's `qaoa_ansatz()` and of
