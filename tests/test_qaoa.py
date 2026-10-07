@@ -53,16 +53,20 @@ def dimod_energies(problem):
         (all_bits(problem.num_qubits), problem.variables))
 
 
-def reference_probabilities(problem, theta):
+def reference_probabilities(problem, theta, energies=None):
     """
     Outcome probabilities of the QAOA state, by direct statevector
     evolution: |+>^n, then per layer the diagonal phase
-    exp(-i gamma (E - offset) / scale) with E from dimod, and
-    exp(-i beta X) on every qubit.
+    exp(-i gamma (E - offset) / scale) and exp(-i beta X) on every qubit.
+    E comes from dimod unless `energies` is given (dimod's array is too
+    large to build at 21 qubits; problem.energies() is checked against it on
+    tiny_a by test_hamiltonian_equals_the_qubo_energy_on_every_state).
     """
     n = problem.num_qubits
     reps = len(theta) // 2
-    phases = (dimod_energies(problem) - problem.offset) / problem.scale
+    if energies is None:
+        energies = dimod_energies(problem)
+    phases = (energies - problem.offset) / problem.scale
     psi = np.full(2 ** n, 2 ** (-n / 2), dtype=complex)
     for layer in range(reps):
         beta, gamma = theta[layer], theta[reps + layer]
@@ -306,6 +310,82 @@ def test_benchmark_rows_and_transfer_columns(tmp_path):
                                                         abs=1e-5)
     assert other['transfer_p_optimal'] != pytest.approx(other['p_optimal'],
                                                         abs=1e-3)
+
+
+QAOA_CSV = os.path.join(REPO_ROOT, 'results', 'qaoa_tiny.csv')
+SAMPLE_CSV = os.path.join(REPO_ROOT, 'results', 'sample_results_sa.csv')
+
+
+@pytest.fixture(scope='module')
+def committed():
+    """results/qaoa_tiny.csv and a rebuilt problem for each of its cases."""
+    frame = pandas.read_csv(QAOA_CSV, comment='#')
+    problems = {(instance, B): qc.build_problem(os.path.join(REPO_ROOT, instance), B)
+                for instance, B in dict.fromkeys(zip(frame['instance'], frame['B']))}
+    return frame, problems
+
+
+def test_committed_csv_covers_the_sample_cases_at_every_depth(committed):
+    frame, _ = committed
+    sample = pandas.read_csv(SAMPLE_CSV, comment='#')
+    cases = set(zip(sample['instance'], sample['B']))
+    assert set(zip(frame['instance'], frame['B'])) == cases
+    for reps in (1, 2, 3):
+        at_depth = frame[frame['reps'] == reps]
+        assert set(zip(at_depth['instance'], at_depth['B'])) == cases
+    assert len(frame) == 3 * len(cases)
+
+
+def test_committed_csv_matches_rebuilt_problems(committed):
+    """
+    Everything that does not depend on the QAOA run is recomputed from the
+    instance: lambda, qubit count, optimum, ground energy, the uniform
+    state's scores and greedy. The trained scores must be consistent.
+    """
+    frame, problems = committed
+    for _, row in frame.iterrows():
+        problem = problems[(row['instance'], row['B'])]
+        assert row['lambda'] == problem.lam
+        assert row['qubits'] == problem.num_qubits
+        assert row['opt_nip'] == problem.opt_nip
+        assert row['opt_qubo'] == pytest.approx(problem.energies().min())
+        uniform = qc.uniform_scores(problem)
+        assert row['uniform_p_optimal'] == pytest.approx(
+            uniform['uniform_p_optimal'], abs=1e-6)
+        assert row['uniform_expected_energy'] == pytest.approx(
+            uniform['uniform_expected_energy'], abs=1e-6)
+        assert 0 <= row['p_ground'] <= row['p_optimal'] <= 1
+        assert 0 <= row['approx_ratio'] <= 1
+        assert row['flow_after_repair'] >= problem.opt_nip
+        assert len(json.loads(row['theta'])) == 2 * row['reps']
+
+
+def test_committed_scores_follow_from_the_stored_angles(committed):
+    """
+    Recompute the exact scores from the stored angles with the reference
+    simulation, so the CSV's numbers are those of its angles and not of some
+    other run: every tiny_a row (14 qubits) and one 21-qubit row's trained
+    and transferred scores. theta is stored to 6 decimals.
+    """
+    frame, problems = committed
+    donor = frame[frame['transfer_p_optimal'].isna()]
+    checks = [(row, 'own') for _, row in frame[frame['qubits'] == 14].iterrows()]
+    other = frame[(frame['qubits'] == 21) & (frame['reps'] == 1)].iloc[0]
+    checks += [(other, 'own'), (other, 'transfer')]
+    for row, which in checks:
+        problem = problems[(row['instance'], row['B'])]
+        theta = row['theta'] if which == 'own' else \
+            donor[donor['reps'] == row['reps']].iloc[0]['theta']
+        probabilities = reference_probabilities(problem, json.loads(theta),
+                                                problem.energies())
+        p_optimal = probabilities[problem.optimal_mask()].sum()
+        if which == 'own':
+            assert row['p_optimal'] == pytest.approx(p_optimal, abs=1e-4)
+            assert row['expected_energy'] == pytest.approx(
+                probabilities @ problem.energies(), abs=1e-3)
+        else:
+            assert row['transfer_p_optimal'] == pytest.approx(p_optimal,
+                                                              abs=1e-4)
 
 
 @pytest.mark.parametrize('name', BACKENDS)
