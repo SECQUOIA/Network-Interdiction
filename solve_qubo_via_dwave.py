@@ -10,7 +10,9 @@ def count_qubit_usage(emb):
         count += len(emb[logical_qubit])
     return count
 
-def solve_bqm_dwave(bqm, annealer_type):
+def solve_bqm_dwave(bqm, annealer_type, seed=None):
+    """Sample `bqm` with the QPU ('qa') or simulated annealing ('sa').
+    `seed` seeds simulated annealing (ignored for 'qa')."""
     if annealer_type == 'qa':
         # qpu_advantage = DWaveSampler(solver='Advantage2_system1.3')
         qpu_advantage = DWaveSampler(solver='Advantage_system6.4')
@@ -25,7 +27,7 @@ def solve_bqm_dwave(bqm, annealer_type):
         return sampleset_greedy
     elif annealer_type == 'sa':
         sampler = neal.SimulatedAnnealingSampler()
-        sampleset = sampler.sample(bqm, num_reads=2500)
+        sampleset = sampler.sample(bqm, num_reads=2500, seed=seed)
         return sampleset
     else:
         print('Unsupported D-Wave sampler, only supports sa and qa')

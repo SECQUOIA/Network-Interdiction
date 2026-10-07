@@ -93,6 +93,21 @@ writes `sample_results_sa_flow_reduction.pdf` and
 `QA_*` columns are empty, and a solver whose columns are empty is skipped
 rather than drawn as empty bars.
 
+[results/slide_instances_sa.csv](results/slide_instances_sa.csv) is the
+same comparison on the nine instances behind the D-Wave slides (the original
+D-Wave results were not stored), with Gurobi's optimum, simulated annealing,
+and both baselines; the D-Wave column is empty. Its header records the exact
+command that produced it. On those instances annealing followed by greedy
+repair never beats plain greedy, and plain greedy reproduces the repaired
+values reported on the slides, which were produced by a version of the repair
+that ignored the annealer's sample (#12).
+[notebooks/analysis.ipynb](notebooks/analysis.ipynb)
+walks through that comparison family by family, including the check against the
+slide values and the penalty windows; the plotting helpers it calls live in
+[utils.py](utils.py) and its figures are saved to
+[figures/](figures/). It reads only the committed CSV, so it needs pandas and
+matplotlib but no Gurobi license or D-Wave token (one optional cell uses Gurobi).
+
 ### Regenerating the results CSV
 
 The sample is reproducible on any machine, with no Gurobi license and no
@@ -100,12 +115,12 @@ D-Wave token:
 
 ```
 python run_benchmark.py --exact brute --solvers sa \
-    --case testcases/tiny_a.flow:1:6.0 \
-    --case testcases/tiny_b.flow:1:9.0 \
-    --case testcases/tiny_b.flow:2:6.0 \
-    --case testcases/tiny_c.flow:1:4.5 \
-    --case testcases/tiny_d.flow:1:8.0 \
-    --case testcases/tiny_d.flow:2:6.5 \
+    --case testcases/tiny_a.flow:1:auto \
+    --case testcases/tiny_b.flow:1:auto \
+    --case testcases/tiny_b.flow:2:auto \
+    --case testcases/tiny_c.flow:1:auto \
+    --case testcases/tiny_d.flow:1:auto \
+    --case testcases/tiny_d.flow:2:auto \
     --out results/sample_results_sa.csv
 ```
 
@@ -129,7 +144,7 @@ A real run needs the licensed tools:
 
 ```
 python run_benchmark.py --exact gurobi --solvers sa,qa \
-    --case testcases/50.planarflow:12:36 \
+    --case testcases/50.planarflow:10:auto \
     --out result_dwave_planar.csv
 ```
 
@@ -139,10 +154,18 @@ adds the QPU pass (D-Wave Leap token required). Both are described under
 [Setup](#setup) above.
 
 The third field of each `--case` is the cardinality penalty coefficient, passed
-to `nip_to_qubo()` as `(lambda, lambda+1)`. It is not a free parameter: the
-window of coefficients whose QUBO ground state actually encodes the NIP optimum
-is narrow, and outside it every ratio in the row would be measured against the
-wrong target. `run_benchmark.py` checks that the exact QUBO optimum decodes to
-an optimal interdiction and refuses to write the row otherwise, so a bad
-lambda fails loudly instead of producing a plausible-looking plot. Deriving
-those bounds rather than searching for them is [issue #2](../../issues/2).
+to `nip_to_qubo()` as `(lambda, lambda+1)`. It is not a free parameter: only a
+window of coefficients makes the QUBO ground state the optimal interdiction,
+and outside it every ratio in the row would be measured against the wrong
+target. Write `auto` to have `run_benchmark.py` compute that window exactly
+from the optimal flow at neighbouring budgets and use its midpoint (issue #2;
+the derivation is in the `run_benchmark.py` docstring). The chosen value and
+the window are recorded in the `lambda`, `lambda_lo` and `lambda_hi` columns.
+The window is often only about one unit wide on the benchmark instances. It
+has no strict interior when `lambda_lo > lambda_hi` (the budget lies above
+the lower convex envelope of optimal flow) or `lambda_lo == lambda_hi`
+(other cut counts tie at the only candidate lambda, even for a convex flow
+curve). Neither case guarantees exactly B cuts, so the row keeps the exact
+optimum and the baselines but no QUBO or solver columns. With a hand-picked
+number instead, `run_benchmark.py` still checks that the exact QUBO optimum
+decodes to an optimal interdiction and refuses to write the row otherwise.
