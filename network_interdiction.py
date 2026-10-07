@@ -444,11 +444,16 @@ def solve_nip_gurobi_trajectory(G, src_node, tgt_node, B, threads=None):
         'trajectory': [(t, surviving_flow(cut)) for t, cut in incumbents],
     }
 
-def improve_dwave_solution(di_g, x, src_node, tgt_node, B):
+def improve_dwave_solution(di_g, x, src_node, tgt_node, B, candidate_edges=None):
     """
     Greedily add/remove interdicted edges so exactly B edges are
     interdicted, then return the resulting edge set and its max-flow
     objective.
+
+    `candidate_edges`, when given, limits which edges the repair may add
+    (issue #14: a decomposition piece may only interdict the arcs it owns,
+    so there must be at least B of them). By default every edge is a
+    candidate, as before.
 
     `x` is a 0/1 array indexed like sorted(di_g.edges()) -- the caller's
     own decode of its sample, not a raw sample dict. This used to decompose
@@ -472,6 +477,8 @@ def improve_dwave_solution(di_g, x, src_node, tgt_node, B):
         return flow_value
 
     edge_list = sorted(di_g.edges(), key=lambda element: (element[0], element[1]))
+    if candidate_edges is not None:
+        candidate_edges = set(candidate_edges)
     interdicted_edges = []
     for i in range(len(x)):
         if x[i] == 1:
@@ -485,6 +492,8 @@ def improve_dwave_solution(di_g, x, src_node, tgt_node, B):
 
             for i in range(len(edge_list)):
                 candidate_interdicted_edge = edge_list[i]
+                if candidate_edges is not None and candidate_interdicted_edge not in candidate_edges:
+                    continue
                 if candidate_interdicted_edge not in interdicted_edges:
                     temp_interdicted_edges = interdicted_edges.copy()
                     temp_interdicted_edges.append(candidate_interdicted_edge)
@@ -1056,7 +1065,25 @@ def solve_nip_qubo_repair_once_end(name, di_g, λ_min, λ_max, src_node, tgt_nod
     # print(f'Best OBJ is {best_obj}')
     # print('------------------------------------')
 
-def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_penalty_coeff):
+def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_penalty_coeff,
+                interdictable=None):
+    """
+    Build the NIP as a BQM: x_i (interdict), gamma_i (arc in the cut) and
+    w_i (the auxiliary that quadratises the cut constraint) for arc i of
+    sorted(di_g.edges()), and pi_v (source side of the cut) for every node
+    other than src_node/tgt_node.
+
+    `interdictable` (issue #14) restricts which arcs may be interdicted; by
+    default every arc may be, and the model is the one this function has
+    always built. An arc left out gets no variables at all: with x_a fixed at
+    0 its cut contribution u_a * pi_u * (1 - pi_v) is already quadratic, so
+    it needs neither gamma_a nor the dual penalty that keeps gamma_a honest.
+    That is what makes a decomposition piece's QUBO smaller than the whole
+    graph's -- only the piece's own arcs carry the three variables per arc --
+    while leaving its ground state the piece's restricted optimum. The
+    x_i/gamma_i/w_i names of the arcs that remain keep their index in the
+    full sorted edge list, so a sample decodes the same way either way.
+    """
     num_nodes = len(di_g.nodes())
     num_edges = len(di_g.edges())
 
@@ -1080,11 +1107,19 @@ def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_pen
     
     edge_list = sorted(di_g.edges(), key=lambda element: (element[0], element[1]))
 
-    obj = cardinality_penalty_coeff * (sum(var_x) - B)
+    if interdictable is None:
+        interdictable = set(edge_list)
+    else:
+        interdictable = set(interdictable)
+        unknown = interdictable - set(edge_list)
+        if unknown:
+            raise ValueError(f"interdictable arcs not in the graph: {sorted(unknown)}")
+
+    obj = cardinality_penalty_coeff * (
+        sum(var_x[i] for i in range(num_edges) if edge_list[i] in interdictable) - B)
 
     for i in range(len(edge_list)):
         (u,v) = edge_list[i]
-        obj += di_g[u][v]['weight'] * (1 - var_x[i]) * var_gamma[i]
 
         temp_pi_u = var_pi[u]
         temp_pi_v = var_pi[v]
@@ -1099,6 +1134,12 @@ def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_pen
         elif v == tgt_node:
             temp_pi_v = 0
         
+        if (u, v) not in interdictable:
+            # the capacity counts exactly when the arc crosses the cut
+            obj += di_g[u][v]['weight'] * temp_pi_u * (1 - temp_pi_v)
+            continue
+
+        obj += di_g[u][v]['weight'] * (1 - var_x[i]) * var_gamma[i]
         obj += dual_penalty_coeff * (temp_pi_u - temp_pi_u * temp_pi_v - temp_pi_u * var_gamma[i] + var_w[i] * (temp_pi_u + temp_pi_v + var_gamma[i] - 1) + (temp_pi_u * temp_pi_v + temp_pi_u * var_gamma[i] + temp_pi_v * var_gamma[i]) - (temp_pi_u + temp_pi_v + var_gamma[i]))
 
     model = obj.compile()

@@ -38,6 +38,38 @@ python network_interdiction.py
 exactly via Gurobi, then via the QUBO formulation + simulated annealing, and
 prints a comparison.
 
+## Decomposition into smaller QUBOs
+
+[decomposition.py](decomposition.py) splits an instance into pieces whose
+QUBOs are smaller than the whole graph's `V + 3E - 2` variables (issue #14).
+It partitions the graph into contiguous pieces, gives each arc to the piece
+its tail lies in, and splits the budget between the pieces either in
+proportion to the global minimum-cut arcs each owns (`mincut`) or to each
+piece's local max flow (`local`). Each piece is then solved on its own
+network: only its arcs may be cut, so they alone carry `x`/`gamma`/`w`
+variables (`nip_to_qubo(..., interdictable=...)`), and the rest of the graph,
+which has no budget there, is contracted exactly. To compare the sizes:
+
+```
+python decomposition.py testcases/50.planarflow --pieces 4 --budget 12
+```
+
+Each piece's subproblem is exact: cutting any set of its arcs leaves the
+reduced network with the same max flow as the whole graph with those arcs
+cut. The decomposition as a whole is a heuristic, since the budget split is
+fixed before any piece is solved. Two limits to know:
+
+- A piece's QUBO needs its own cardinality coefficient: the lambda window
+  (issue #2) of the piece, not the whole graph's.
+- The contraction solves `2**t` minimum cuts for a zone with `t` boundary
+  terminals, so it is skipped above 12 (`--max-terminals`). Pieces of the
+  Erdős–Rényi testcases have more than that and stay uncontracted; their
+  QUBOs are smaller only by the three variables of each arc they do not own.
+
+`solve_decomposed()` solves the pieces sequentially (each seeing what earlier
+pieces cut) or independently, with `brute_force_piece_solver` for small
+pieces or `qubo_piece_solver(lambda)` for the annealer.
+
 ## Benchmark results and plots
 
 [network_interdiction_plot.py](network_interdiction_plot.py) draws the two
