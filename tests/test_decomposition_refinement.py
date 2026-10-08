@@ -11,6 +11,7 @@ answer; each is pinned as a literal graph, so a version of the method that
 does nothing fails here.
 """
 import itertools
+import json
 import os
 import random
 
@@ -223,6 +224,38 @@ def test_partition_to_fit_uses_the_fewest_pieces_that_fit():
     fewer = dc.partition_graph(g, len(pieces) - 1, seed=0)
     assert max(dc.piece_qubo_size(dc.piece_subproblem(g, s, t, fewer, i))
                for i in range(len(fewer))) > limit
+
+
+@needs_gurobi
+def test_benchmark_rows_cover_every_variant(tmp_path):
+    import pandas
+    import run_decomposition_benchmark as rdb
+
+    instance = os.path.join(REPO_ROOT, 'testcases', 'tiny_b.flow')
+    g, s, t = ni.read_flow_file(instance)
+    cases = tmp_path / 'cases.csv'
+    rows = [(B, optimum(g, s, t, B), rb.greedy_from_scratch(g, s, t, B))
+            for B in (1, 2)]
+    cases.write_text('instance,B,Opt_NIP,Greedy,maxflow\n' + ''.join(
+        f'{instance},{B},{opt},{greedy},{rb.max_flow(g, s, t)}\n'
+        for B, opt, greedy in rows))
+    out = tmp_path / 'bench.csv'
+    assert rdb.main(['--cases', str(cases), '--settings', 'pieces4',
+                     '--refine', '--out', str(out)]) == 0
+    frame = pandas.read_csv(out, comment='#')
+    assert list(frame.columns) == rdb.COLUMNS
+    # 3 rules x 3 modes, plus the refine row, per budget.
+    assert len(frame) == 2 * (3 * 3 + 1)
+    for B, opt, _ in rows:
+        sub = frame[frame['B'] == B]
+        assert (sub['flow'] >= opt).all()
+        assert (sub['ratio'] <= 1).all()
+        for _, row in sub.iterrows():
+            budgets = json.loads(row['budgets'])
+            assert sum(budgets) <= B and len(budgets) == row['pieces'] == 4
+        assert sub.loc[sub['rule'] == 'marginal+refine', 'flow'].item() <= \
+            sub.loc[(sub['rule'] == 'marginal') & (sub['mode'] == 'iterated'),
+                    'flow'].item()
 
 
 def test_partition_to_fit_reports_a_limit_nothing_meets():
