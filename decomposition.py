@@ -13,7 +13,9 @@ on slides 11-12 of the S-T_NIP deck:
    slides' two rules: in proportion to the arcs of the global minimum cut
    each piece owns ('mincut'), or from each piece's local max flow with a
    super-source/super-sink attached to its boundary vertices ('local'; read
-   here as in proportion to it).
+   here as in proportion to it). A third rule, 'marginal', solves each
+   piece for 0..B cuts first and gives the budget to the pieces whose cuts
+   save the most (marginal_split()).
 4. piece_subproblem() builds the network one piece is solved on. Only the
    piece's own arcs may be interdicted there, so the rest of the graph
    carries no budget and is contracted exactly (contract_zone());
@@ -21,7 +23,11 @@ on slides 11-12 of the S-T_NIP deck:
    x/gamma/w variables. The slide prototype kept the whole graph and only
    restricted which arcs could be cut, which left the QUBO its full size.
 5. solve_decomposed() solves every piece that has a budget and combines the
-   interdictions.
+   interdictions: independently, sequentially, or 'iterated' (re-solving
+   each piece against the others until nothing improves).
+6. refine_split() moves budget between pieces while that lowers the flow,
+   and partition_to_fit() picks the fewest pieces whose QUBOs fit a device
+   (156 qubits for IBM Heron).
 
 What is exact and what is not
 -----------------------------
@@ -31,12 +37,13 @@ with X removed (and with whatever earlier pieces interdicted). A per-piece
 QUBO whose ground state is its optimum -- lambda inside that piece's window,
 see #2 -- therefore solves the piece exactly.
 
-The decomposition as a whole is a heuristic. The split is fixed before any
-piece is solved, and a fixed split is optimal only if every piece's last
-interdiction is worth the same (the common-multiplier condition in #14).
-Replacing the split with one multiplier for all pieces, measuring what fits
-on each device, comparing against Benders (#15) and evaluating on real
-networks (#1) are the rest of #14.
+The decomposition as a whole is a heuristic. A split is optimal only if
+every piece's last interdiction is worth the same (the common-multiplier
+condition in #14); 'marginal' aims at that from measured per-piece curves,
+and refine_split() repairs what treating the pieces' savings as additive
+gets wrong. Comparing against Benders (#15) and evaluating on real networks
+(#1) are still to do. run_decomposition_benchmark.py measures every rule
+against the exact optimum.
 
 Command line
 ------------
@@ -55,8 +62,13 @@ import networkx as nx
 import network_interdiction as ni
 import solve_qubo_via_dwave
 
-SPLIT_STRATEGIES = ('mincut', 'local')
-SOLVE_MODES = ('sequential', 'independent')
+SPLIT_STRATEGIES = ('mincut', 'local', 'marginal')
+SOLVE_MODES = ('sequential', 'independent', 'iterated')
+
+# Rounds of re-solving every piece in 'iterated' mode, and budget moves
+# refine_split() tries, before stopping even without convergence.
+DEFAULT_MAX_ROUNDS = 10
+DEFAULT_MAX_MOVES = 20
 
 # Free terminals past which contract_zone() leaves a zone as it is. The exact
 # contraction solves one minimum cut per source/sink labelling of the zone's
@@ -285,25 +297,36 @@ def apportion(B, weights):
     return shares
 
 
-def split_budget(di_g, src_node, tgt_node, B, pieces, strategy='mincut'):
+def split_budget(di_g, src_node, tgt_node, B, pieces, strategy='mincut',
+                 solve_piece=None, max_terminals=DEFAULT_MAX_TERMINALS):
     """
     Split the budget B between `pieces`: one integer per piece, summing to B
     unless no piece has any weight (then all zero, see apportion()).
 
-    'mincut'  in proportion to the arcs of the global minimum cut each piece
-              owns (mincut_arc_counts())
-    'local'   in proportion to each piece's local max flow
-              (local_max_flows()). The slides derive this split from the
-              local max flows; allocating in proportion to them is this
-              module's reading of that rule.
+    'mincut'    in proportion to the arcs of the global minimum cut each
+                piece owns (mincut_arc_counts())
+    'local'     in proportion to each piece's local max flow
+                (local_max_flows()). The slides derive this split from the
+                local max flows; allocating in proportion to them is this
+                module's reading of that rule.
+    'marginal'  by what each piece's cuts are worth: marginal_split(), with
+                `solve_piece` (gurobi_piece_solver by default) measuring
+                every piece's best flow for 0..B cuts
 
-    Both are fixed splits, decided before any piece is solved and never
-    revised.
+    'mincut' and 'local' are proportional rules decided from the graph
+    alone; 'marginal' solves the pieces first. All three are decided before
+    the pieces are combined; refine_split() revises a split afterwards.
     """
     if strategy == 'mincut':
         weights = mincut_arc_counts(di_g, src_node, tgt_node, pieces)
     elif strategy == 'local':
         weights = local_max_flows(di_g, src_node, tgt_node, pieces)
+    elif strategy == 'marginal':
+        budgets, _curves = marginal_split(
+            di_g, src_node, tgt_node, B, pieces,
+            solve_piece if solve_piece is not None else gurobi_piece_solver,
+            max_terminals)
+        return budgets
     else:
         raise ValueError(
             f"unknown split strategy {strategy!r}, expected one of "
@@ -500,6 +523,173 @@ def brute_force_piece_solver(sub, budget):
     return [sub.arc_map[arc] for arc in best_arcs]
 
 
+def gurobi_piece_solver(sub, budget):
+    """
+    The piece's exact optimum from the NIP MILP on its reduced network with
+    only its arcs interdictable (Gurobi license required). It scales to
+    pieces brute force cannot, so it is the exact per-piece reference for
+    the benchmarks: with it, the only error left is the decomposition's.
+    Returns original arcs.
+    """
+    size = min(budget, len(sub.interdictable))
+    if size == 0:
+        return []
+    model, x = ni._build_nip_milp(sub.graph, sub.src, sub.tgt, size,
+                                  sub.interdictable)
+    model.optimize()
+    return [sub.arc_map[arc] for arc in sub.interdictable if x[arc].X > 0.5]
+
+
+def piece_curves(di_g, src_node, tgt_node, B, pieces, solve_piece,
+                 interdicted=(), max_terminals=DEFAULT_MAX_TERMINALS):
+    """
+    For every piece, its best surviving flow (of the whole graph) when only
+    that piece cuts k = 0, 1, ... of its arcs, up to B or its arc count,
+    with `interdicted` already removed. curve[0] is the same for every piece.
+    """
+    owned = [0] * len(pieces)
+    for owner in arc_owners(di_g, pieces).values():
+        owned[owner] += 1
+    base = _surviving_flow(di_g, src_node, tgt_node, interdicted)
+    curves = []
+    for index, piece_owned in enumerate(owned):
+        sub = piece_subproblem(di_g, src_node, tgt_node, pieces, index,
+                               interdicted, max_terminals)
+        curve = [base]
+        for k in range(1, min(B, len(sub.interdictable)) + 1):
+            cut = list(interdicted) + list(solve_piece(sub, k))
+            curve.append(_surviving_flow(di_g, src_node, tgt_node, cut))
+        curves.append(curve)
+    return curves
+
+
+def marginal_split(di_g, src_node, tgt_node, B, pieces, solve_piece,
+                   max_terminals=DEFAULT_MAX_TERMINALS):
+    """
+    Split B by what each piece's cuts are worth (#14's common-multiplier
+    task). Each piece's saving s_P(k) = f(0) - f_P(k) is measured with
+    piece_curves(), and the split maximizes the summed savings
+    sum_P s_P(B_P) subject to sum_P B_P = B (or every arc, if fewer), by
+    dynamic programming over the pieces.
+
+    One multiplier for all pieces, the rule #14 describes, solves this same
+    allocation through its Lagrangian; it agrees with the exact allocation
+    when every curve is convex and can miss it otherwise, so the exact one
+    is used. Treating savings as additive is the heuristic part: two pieces
+    that cut the same flow path save less together than apart, which
+    'iterated' solving and refine_split() correct afterwards.
+
+    Returns (budgets, curves).
+    """
+    curves = piece_curves(di_g, src_node, tgt_node, B, pieces, solve_piece,
+                          max_terminals=max_terminals)
+    return allocate_budget(curves, B), curves
+
+
+def allocate_budget(curves, B):
+    """
+    The split maximizing sum_P (curve_P[0] - curve_P[B_P]) subject to
+    sum_P B_P = min(B, sum of the curves' lengths - 1), by dynamic
+    programming over the pieces: exact for any curves, convex or not.
+    Ties keep the allocation found first, which favours earlier pieces
+    taking fewer cuts.
+    """
+    total = min(B, sum(len(curve) - 1 for curve in curves))
+    # best[b] = (summed saving, budgets) over the pieces seen so far with b
+    # cuts used in all.
+    best = {0: (0, [])}
+    for curve in curves:
+        saving = [curve[0] - flow for flow in curve]
+        step = {}
+        for used, (value, budgets) in best.items():
+            for k in range(min(len(curve) - 1, total - used) + 1):
+                candidate = (value + saving[k], budgets + [k])
+                if used + k not in step or candidate[0] > step[used + k][0]:
+                    step[used + k] = candidate
+        best = step
+    return best[total][1]
+
+
+def refine_split(di_g, src_node, tgt_node, pieces, budgets, solve_piece,
+                 mode='iterated', max_moves=DEFAULT_MAX_MOVES,
+                 max_terminals=DEFAULT_MAX_TERMINALS):
+    """
+    Improve a split by moving one unit of budget between two pieces at a
+    time, keeping the best move while it lowers the combined surviving
+    flow (solve_decomposed() in `mode`). Stops when no move helps or after
+    `max_moves` moves. Each round solves the decomposition once per ordered
+    pair of pieces, so it is meant for a handful of pieces.
+
+    Returns (budgets, interdicted arcs, surviving flow).
+    """
+    owned = [0] * len(pieces)
+    for owner in arc_owners(di_g, pieces).values():
+        owned[owner] += 1
+
+    def evaluate(split):
+        return solve_decomposed(di_g, src_node, tgt_node, pieces, split,
+                                solve_piece, mode, max_terminals)
+
+    budgets = list(budgets)
+    interdicted, flow = evaluate(budgets)
+    for _ in range(max_moves):
+        best = None
+        for give, take in itertools.permutations(range(len(pieces)), 2):
+            if budgets[give] == 0 or budgets[take] >= owned[take]:
+                continue
+            candidate = list(budgets)
+            candidate[give] -= 1
+            candidate[take] += 1
+            cut, cand_flow = evaluate(candidate)
+            if cand_flow < flow and (best is None or cand_flow < best[2]):
+                best = (candidate, cut, cand_flow)
+        if best is None:
+            break
+        budgets, interdicted, flow = best
+    return budgets, interdicted, flow
+
+
+def piece_qubo_size(sub):
+    """
+    Variables of the piece's QUBO without building it: one pi per node of
+    the reduced network other than the source and sink, and x, gamma and w
+    for each arc the piece may cut (piece_qubo() gives the rest no
+    variables). 0 when the piece has no arcs to cut.
+    """
+    if not sub.interdictable:
+        return 0
+    return sub.graph.number_of_nodes() - 2 + 3 * len(sub.interdictable)
+
+
+def partition_to_fit(di_g, src_node, tgt_node, max_qubits, seed=0,
+                     max_pieces=None, max_terminals=DEFAULT_MAX_TERMINALS):
+    """
+    The fewest pieces whose QUBOs all fit `max_qubits` variables (156 for an
+    IBM Heron device), trying 1, 2, ... pieces with partition_graph().
+
+    A piece's QUBO keeps one pi per node of its reduced network, so a piece
+    whose surroundings cannot be contracted (more than `max_terminals`
+    terminals) carries most of the graph's nodes however few arcs it owns,
+    and may never fit; that raises ValueError, as does reaching
+    `max_pieces` (default: the node count).
+
+    Returns (pieces, sizes).
+    """
+    limit = max_pieces or di_g.number_of_nodes()
+    # Some piece owns at least E / count arcs, 3 variables each, so fewer
+    # than 3E / max_qubits pieces cannot fit; start there.
+    first = max(1, -(-3 * di_g.number_of_edges() // max_qubits))
+    for count in range(min(first, limit), limit + 1):
+        pieces = partition_graph(di_g, count, seed=seed)
+        sizes = [piece_qubo_size(piece_subproblem(
+            di_g, src_node, tgt_node, pieces, index,
+            max_terminals=max_terminals)) for index in range(len(pieces))]
+        if max(sizes) <= max_qubits:
+            return pieces, sizes
+    raise ValueError(f'no partition into at most {limit} pieces fits '
+                     f'{max_qubits} qubits')
+
+
 def qubo_piece_solver(cardinality_penalty_coeff, dual_penalty_coeff=None,
                       sampler=None, num_samples=DEFAULT_REPAIRED_SAMPLES):
     """
@@ -541,7 +731,8 @@ def qubo_piece_solver(cardinality_penalty_coeff, dual_penalty_coeff=None,
 
 
 def solve_decomposed(di_g, src_node, tgt_node, pieces, budgets, solve_piece,
-                     mode='sequential', max_terminals=DEFAULT_MAX_TERMINALS):
+                     mode='sequential', max_terminals=DEFAULT_MAX_TERMINALS,
+                     max_rounds=DEFAULT_MAX_ROUNDS):
     """
     Solve every piece with a positive budget and combine the interdictions.
 
@@ -554,6 +745,12 @@ def solve_decomposed(di_g, src_node, tgt_node, pieces, budgets, solve_piece,
     'independent'  every piece is solved against the uninterdicted graph,
                    so the pieces can be solved in parallel (on separate
                    devices, say) and their choices are only combined after
+    'iterated'     'sequential', then every piece is re-solved against all
+                   the other pieces' current cuts, keeping its new cuts when
+                   they lower the combined flow, until a full round changes
+                   nothing (at most `max_rounds` rounds). Sequential solving
+                   only lets a piece answer the pieces before it; this lets
+                   the early pieces answer the later ones too.
 
     Returns (interdicted arcs, max flow of `di_g` without them).
     """
@@ -563,11 +760,9 @@ def solve_decomposed(di_g, src_node, tgt_node, pieces, budgets, solve_piece,
     if len(budgets) != len(pieces):
         raise ValueError(f"{len(budgets)} budgets for {len(pieces)} pieces")
     owners = arc_owners(di_g, pieces)
-    interdicted = []
-    for index, budget in enumerate(budgets):
-        if budget <= 0:
-            continue
-        fixed = interdicted if mode == 'sequential' else ()
+
+    def solve(index, fixed):
+        budget = budgets[index]
         sub = piece_subproblem(di_g, src_node, tgt_node, pieces, index, fixed,
                                max_terminals)
         chosen = list(solve_piece(sub, budget))
@@ -576,8 +771,29 @@ def solve_decomposed(di_g, src_node, tgt_node, pieces, budgets, solve_piece,
             raise ValueError(
                 f"piece {index} returned {chosen}: a piece may cut at most "
                 f"its budget ({budget}) of its own arcs")
-        interdicted.extend(chosen)
-    return interdicted, _surviving_flow(di_g, src_node, tgt_node, interdicted)
+        return chosen
+
+    active = [index for index, budget in enumerate(budgets) if budget > 0]
+    interdicted = []
+    for index in active:
+        fixed = () if mode == 'independent' else interdicted
+        interdicted.extend(solve(index, fixed))
+    flow = _surviving_flow(di_g, src_node, tgt_node, interdicted)
+    if mode != 'iterated':
+        return interdicted, flow
+
+    for _ in range(max_rounds):
+        improved = False
+        for index in active:
+            others = [arc for arc in interdicted if owners[arc] != index]
+            candidate = others + solve(index, others)
+            candidate_flow = _surviving_flow(di_g, src_node, tgt_node,
+                                             candidate)
+            if candidate_flow < flow:
+                interdicted, flow, improved = candidate, candidate_flow, True
+        if not improved:
+            break
+    return interdicted, flow
 
 
 def main(argv=None):
@@ -585,8 +801,12 @@ def main(argv=None):
         description='Partition an NIP instance, split its budget, and '
                     'compare each piece\'s QUBO size with the whole graph\'s.')
     parser.add_argument('instance', help='flow file (see read_flow_file)')
-    parser.add_argument('--pieces', type=int, required=True,
-                        help='number of pieces to partition into')
+    size = parser.add_mutually_exclusive_group(required=True)
+    size.add_argument('--pieces', type=int,
+                      help='number of pieces to partition into')
+    size.add_argument('--fit-qubits', type=int,
+                      help='use the fewest pieces whose QUBOs fit this many '
+                           'qubits (156 for IBM Heron)')
     parser.add_argument('--budget', type=int, required=True,
                         help='interdiction budget B to split')
     parser.add_argument('--split', choices=SPLIT_STRATEGIES, default='mincut',
@@ -601,9 +821,15 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     di_g, src_node, tgt_node = ni.read_flow_file(args.instance)
-    pieces = partition_graph(di_g, args.pieces, seed=args.seed)
+    if args.fit_qubits:
+        pieces, _sizes = partition_to_fit(di_g, src_node, tgt_node,
+                                          args.fit_qubits, seed=args.seed,
+                                          max_terminals=args.max_terminals)
+        args.pieces = len(pieces)
+    else:
+        pieces = partition_graph(di_g, args.pieces, seed=args.seed)
     budgets = split_budget(di_g, src_node, tgt_node, args.budget, pieces,
-                           args.split)
+                           args.split, max_terminals=args.max_terminals)
     owners = arc_owners(di_g, pieces)
     # The coefficients do not change which variables a QUBO has.
     whole = len(ni.nip_to_qubo(args.budget, di_g, src_node, tgt_node,

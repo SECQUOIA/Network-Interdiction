@@ -329,11 +329,15 @@ def gurobi_verify_parameters(G, src_node, tgt_node, B, λ, β):
 
     return m.ObjVal, curr_obj, interdicted_edges
     
-def _build_nip_milp(G, src_node, tgt_node, B):
+def _build_nip_milp(G, src_node, tgt_node, B, interdictable=None):
     """
     The single-level NIP MILP (Wood 1993): min sum u(1-x)gamma subject to the
     min-cut constraints and sum(x) <= B. Returns (model, x) with the model
     not yet optimized; OutputFlag is 0.
+
+    `interdictable` (issue #14), when given, is the set of arcs that may be
+    cut; every other arc's x is fixed at 0, as nip_to_qubo() does for the
+    QUBO. By default every arc may be cut.
     """
     m = Model("NIP")
 
@@ -342,6 +346,14 @@ def _build_nip_milp(G, src_node, tgt_node, B):
 
     # Create binary variables x indexed over edges of G
     x = m.addVars(G.edges(), vtype=GRB.BINARY, name='x')
+    if interdictable is not None:
+        allowed = set(interdictable)
+        unknown = allowed - set(G.edges())
+        if unknown:
+            raise ValueError(f"interdictable arcs not in the graph: {sorted(unknown)}")
+        for e in G.edges():
+            if e not in allowed:
+                x[e].UB = 0
 
     # Create binary variables gamma indexed over edges of G
     gamma = m.addVars(G.edges(), vtype=GRB.BINARY, name='gamma')
@@ -368,8 +380,8 @@ def _build_nip_milp(G, src_node, tgt_node, B):
 
 
 # solve the original NIP MIP
-def solve_nip_gurobi(G, src_node, tgt_node, B):
-    m, x = _build_nip_milp(G, src_node, tgt_node, B)
+def solve_nip_gurobi(G, src_node, tgt_node, B, interdictable=None):
+    m, x = _build_nip_milp(G, src_node, tgt_node, B, interdictable)
 
     # Solve the model
     m.optimize()
