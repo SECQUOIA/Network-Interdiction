@@ -187,3 +187,30 @@ def test_command_line_runs_mps(capsys):
                         'mps', '--maxiter', '5', '--shots', '100']) == 0
     out = capsys.readouterr().out
     assert 'gap closed' in out and 'exact scores need' in out
+
+
+@needs_gurobi
+def test_mid_script_rows_for_donor_and_trained_angles(tmp_path):
+    backend_module('qiskit')
+    import json
+    import pandas
+    import run_qaoa_mid
+
+    out = tmp_path / 'mid.csv'
+    assert run_qaoa_mid.main([
+        '--reps', '1', '--angles', 'donor,train', '--only', 'knn_6_2_s0.flow',
+        '--shots', '200', '--train-maxiter', '10', '--out', str(out)]) == 0
+    frame = pandas.read_csv(out, comment='#')
+    assert list(frame.columns) == run_qaoa_mid.COLUMNS
+    assert list(frame['angles']) == ['donor', 'train']
+    donor = frame.iloc[0]
+    assert json.loads(donor['theta']) == pytest.approx(
+        run_qaoa_mid.donor_angles()[1], abs=1e-6)
+    assert donor['evaluations'] == 0 and frame.iloc[1]['evaluations'] > 0
+    for _, row in frame.iterrows():
+        assert row['qubits'] == 40
+        assert row['gap_closed'] == pytest.approx(
+            (row['offset'] - row['expected_energy'])
+            / (row['offset'] - row['ground_energy']), abs=1e-5)
+        assert 0 <= row['shot_p_optimal'] <= row['p_feasible'] <= 1
+        assert row['flow_after_repair'] >= row['opt_nip']
