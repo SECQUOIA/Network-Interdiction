@@ -177,8 +177,8 @@ python qaoa_qiskit.py testcases/mid/knn_11_2_s0.flow --budget 2 --reps 1 \
 
 [run_qaoa_mid.py](run_qaoa_mid.py) runs every manifest row at depths 1 to 3
 with the angles trained on `tiny_a` reused unchanged (parameter transfer,
-#16), and trains p = 1 directly on the rows of up to 81 qubits for
-comparison.
+#16). For comparison, it also trains the angles directly, at every depth, on
+the rows of up to 81 qubits (`--train-max-qubits`).
 
 ## Benchmark results and plots
 
