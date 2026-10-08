@@ -79,17 +79,20 @@ def test_uncapped_mps_matches_the_statevector(order, tiny_family):
                                                               abs=1e-9)
 
 
-def test_capped_mps_stays_close_on_tiny_a(tiny_rcm, tiny_family):
+def test_the_bond_dimension_cap_reaches_the_simulator(tiny_rcm, tiny_family):
     module = backend_module('qiskit')
     theta = np.random.default_rng(1).uniform(-1, 1, 4)
-    capped = module.QiskitBackend(tiny_rcm, 2, method='mps',
-                                  max_bond_dimension=4)
     phases = (dimod_energies(tiny_family) - tiny_family.offset) / tiny_family.scale
     exact = reference_probabilities(tiny_family, theta) @ phases
-    # A cap of 4 is far below what tiny_a needs, so the value moves, but it
-    # remains an estimate of the same quantity.
-    assert capped.normalized_expectation(theta) == pytest.approx(exact,
-                                                                 abs=0.5)
+    # In the rcm order tiny_a needs bond dimension 4 at p = 2: a cap of 4 is
+    # still exact, a cap of 2 truncates and moves the value (by 0.056).
+    at_four = module.QiskitBackend(tiny_rcm, 2, method='mps',
+                                   max_bond_dimension=4)
+    at_two = module.QiskitBackend(tiny_rcm, 2, method='mps',
+                                  max_bond_dimension=2)
+    assert at_four.normalized_expectation(theta) == pytest.approx(exact,
+                                                                  abs=1e-9)
+    assert 0.01 < abs(at_two.normalized_expectation(theta) - exact) < 0.5
 
 
 def test_mps_shots_decode_in_the_rcm_order(tiny_rcm, tiny_family):
