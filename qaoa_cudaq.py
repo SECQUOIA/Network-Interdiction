@@ -23,6 +23,10 @@ import numpy as np
 
 import qaoa_common
 
+# CUDA-Q targets that hold the full statevector, so get_state() can give
+# exact probabilities.
+STATEVECTOR_TARGETS = {'qpp-cpu', 'nvidia', 'nvidia-fp64', 'nvidia-mgpu'}
+
 
 @cudaq.kernel
 def nip_qaoa_kernel(num_qubits: int, reps: int, z_qubits: list[int],
@@ -66,12 +70,20 @@ def spin_operator(problem):
 
 
 class CudaqBackend:
-    """The QAOA kernel for one problem and depth, on the active CUDA-Q target."""
+    """
+    The QAOA kernel for one problem and depth, on the active CUDA-Q target.
+
+    Exact probabilities (cudaq.get_state) come only from a statevector
+    target; on a tensor-network target such as 'tensornet-mps' (GPU only)
+    run_qaoa() scores from observe() and shots instead.
+    """
     name = 'cudaq'
 
     def __init__(self, problem, reps):
         self.problem = problem
         self.reps = reps
+        self.exact_probabilities = (
+            cudaq.get_target().name in STATEVECTOR_TARGETS)
         self.operator = spin_operator(problem)
         scale = problem.scale
         z_terms = [(i, coeff / scale) for i, coeff in enumerate(problem.h)
