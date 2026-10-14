@@ -306,6 +306,8 @@ class NIPQaoaProblem:
 def restricted_optimum_curve(di_g, src, tgt, interdictable, backend):
     """Exact f(k) for a contracted piece, including its fixed boundary arcs."""
     edges = sorted(interdictable)
+    integral = all(float(data['weight']).is_integer()
+                   for _, _, data in di_g.edges(data=True))
     curve = []
     for k in range(len(edges) + 1):
         if backend == 'brute':
@@ -314,9 +316,14 @@ def restricted_optimum_curve(di_g, src, tgt, interdictable, backend):
         elif backend == 'gurobi':
             model, _ = ni._build_nip_milp(di_g, src, tgt, k, edges)
             model.optimize()
-            if model.Status != 2:
+            if model.Status != ni.GRB.OPTIMAL:
                 raise RuntimeError('piece reference did not reach optimality')
             value = float(model.ObjVal)
+            # Integer flow files (and their contractions) have integer
+            # optima. Strip MIP tolerance noise before comparing window
+            # endpoints, without rounding callers' fractional capacities.
+            if integral:
+                value = round(value)
         else:
             raise ValueError(f'unknown exact backend: {backend}')
         curve.append(value)

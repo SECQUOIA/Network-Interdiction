@@ -66,12 +66,18 @@ def test_repair_cannot_cut_a_fixed_high_capacity_arc(problem):
 
 
 @needs_gurobi
-def test_restricted_gurobi_reference_agrees_with_enumeration(problem, restricted):
+@pytest.mark.parametrize('scale', [1, 0.125])
+def test_restricted_gurobi_reference_agrees_with_enumeration(problem, scale):
+    graph = problem.di_g.copy()
+    for _, _, data in graph.edges(data=True):
+        data['weight'] *= scale
+    expected = qc.problem_from_graph(
+        graph, 0, 3, 1, interdictable=[(0, 1), (0, 2)])
     actual = qc.problem_from_graph(
-        problem.di_g, 0, 3, 1, interdictable=[(0, 1), (0, 2)],
+        graph, 0, 3, 1, interdictable=[(0, 1), (0, 2)],
         exact_backend='gurobi')
-    assert actual.lambda_window == pytest.approx(restricted.lambda_window)
-    assert actual.ground_energy == pytest.approx(-12)
+    assert actual.lambda_window == pytest.approx((5 * scale, 10 * scale))
+    assert actual.ground_energy == pytest.approx(expected.ground_energy)
 
 
 def test_zero_budget_sample_score_is_finite():
