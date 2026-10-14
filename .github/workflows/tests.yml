@@ -64,4 +64,4 @@ jobs:
         env:
           REQUIRE_TRANSFER_BACKENDS: '1'
           OMP_NUM_THREADS: '1'
-        run: python -m pytest tests/test_parameter_transfer.py -v -ra
+        run: python -m pytest tests/test_parameter_transfer.py tests/test_transfer_results.py -v -ra

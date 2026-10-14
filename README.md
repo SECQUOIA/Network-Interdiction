@@ -164,7 +164,8 @@ transfer-energy profiles are clustered, with a medoid schedule per cluster.
 IBM uses nearest graph-level features standardized on the donor bank.
 Neither method averages periodic angles.
 
-Install the optional dependencies and run the controlled comparison:
+Install the optional dependencies with Python 3.11 or newer and run the
+controlled comparison:
 
 ```bash
 pip install -r requirements.txt -r requirements-qaoa.txt
@@ -175,7 +176,10 @@ OMP_NUM_THREADS=1 python run_parameter_transfer.py --out results/parameter_trans
 
 The default experiment trains on 12 weighted two-route networks with four
 vertices, then freezes all models and evaluates six unseen five-vertex
-networks at depths 1 and 2. It compares per-instance COBYLA, the first fixed
+networks at depths 1 and 2. Cases have budget 1 and are conditioned on a
+nonempty penalty window; greedy is therefore exact on this cohort. Raw
+energy and probability scores distinguish the quantum methods even when
+repair returns the optimum for all of them. It compares per-instance COBYLA, the first fixed
 donor, IBM transfer, GAT transfer, and a regularized warm start with a pooled
 training schedule. The CSV reports exact QUBO approximation ratios, energy
 gap closed, optimal-interdiction probability, raw feasibility and repaired
@@ -183,6 +187,18 @@ flow. Training times, every graph and donor angle, and GAT checkpoints are
 saved alongside it. Output files are never overwritten. These small graphs
 test the transfer workflow; they do not establish performance on hard NIP
 instances. Split by graph before adding other budgets to a training bank.
+
+The completed [60-row comparison](results/parameter_transfer.csv), its
+[graph and donor record](results/parameter_transfer.json), and the two GAT
+checkpoints are saved in `results/`. At depth 2, mean energy-gap closure
+over the same six targets is 0.6528 for the fixed donor, 0.6511 for IBM,
+0.6621 for GAT, 0.6695 for target-trained QAOA, and 0.8610 for the warm
+start. The warm start has lower mean optimal-interdiction probability than
+target-trained QAOA (0.1183 versus 0.1377), despite its better energy.
+All 60 rows reach the exact flow after repair, as does greedy from scratch.
+Transfer uses no target quantum-angle optimization evaluations, but model
+training, exact penalty selection and warm-start classical setup still cost
+work. The results come from one split and seed, not a generalization study.
 
 [qaoa_warm_start.py](qaoa_warm_start.py) adapts the regularized product state
 and tilted mixer of [RWS-QAOA](https://arxiv.org/abs/2603.10191) to the NIP
