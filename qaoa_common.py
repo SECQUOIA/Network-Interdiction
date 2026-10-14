@@ -67,6 +67,7 @@ the tiny_* instances (14 to 22 qubits) and nothing larger.
 import argparse
 import contextlib
 import io
+import itertools
 import json
 import math
 import sys
@@ -190,6 +191,7 @@ class NIPQaoaProblem:
     offset: float
     opt_nip: float
     ground_energy: float = None
+    interdictable: object = None
     _cache: dict = field(default_factory=dict, repr=False)
 
     @property
@@ -229,8 +231,17 @@ class NIPQaoaProblem:
 
     @property
     def x_qubits(self):
-        """Qubit of x_i for each arc i of edge_list."""
-        return [self.variables.index(f'x_{i}') for i in range(len(self.edge_list))]
+        """Qubits of the interdictable arcs, in edge-list order."""
+        return [self.variables.index(f'x_{i}')
+                for i, edge in enumerate(self.edge_list)
+                if edge in self.interdictable_edges]
+
+    @property
+    def interdictable_edges(self):
+        """Original arcs that have x variables; fixed contraction arcs do not."""
+        if self.interdictable is None:
+            return self.edge_list
+        return [edge for edge in self.edge_list if edge in self.interdictable]
 
     def energies(self):
         """
@@ -260,10 +271,11 @@ class NIPQaoaProblem:
         """
         self._require_exact('optimal_mask()')
         if 'optimal_mask' not in self._cache:
-            num_edges = len(self.edge_list)
+            edges = self.interdictable_edges
+            num_edges = len(edges)
             optimal_pattern = np.zeros(2 ** num_edges, dtype=bool)
             for pattern in range(2 ** num_edges):
-                cut = [self.edge_list[e] for e in range(num_edges)
+                cut = [edges[e] for e in range(num_edges)
                        if (pattern >> e) & 1]
                 optimal_pattern[pattern] = (
                     len(cut) <= self.B and
@@ -282,17 +294,38 @@ class NIPQaoaProblem:
 
     def interdicted_edges(self, bits):
         """Arcs whose x bit is 1 in `bits` (per-qubit bits)."""
-        return [edge for edge, qubit in zip(self.edge_list, self.x_qubits)
+        return [edge for edge, qubit in zip(self.interdictable_edges, self.x_qubits)
                 if bits[qubit] == 1]
 
     def x_vector(self, bits):
         """The x array improve_dwave_solution() takes, indexed by edge_list."""
-        return np.array([bits[qubit] for qubit in self.x_qubits], dtype=int)
+        cut = set(self.interdicted_edges(bits))
+        return np.array([int(edge in cut) for edge in self.edge_list], dtype=int)
+
+
+def restricted_optimum_curve(di_g, src, tgt, interdictable, backend):
+    """Exact f(k) for a contracted piece, including its fixed boundary arcs."""
+    edges = sorted(interdictable)
+    curve = []
+    for k in range(len(edges) + 1):
+        if backend == 'brute':
+            value = min(rb.max_flow(di_g, src, tgt, cut)
+                        for cut in itertools.combinations(edges, k))
+        elif backend == 'gurobi':
+            model, _ = ni._build_nip_milp(di_g, src, tgt, k, edges)
+            model.optimize()
+            if model.Status != 2:
+                raise RuntimeError('piece reference did not reach optimality')
+            value = float(model.ObjVal)
+        else:
+            raise ValueError(f'unknown exact backend: {backend}')
+        curve.append(value)
+    return curve
 
 
 def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
                        max_qubits=DEFAULT_MAX_QUBITS, exact_backend='brute',
-                       order='family'):
+                       order='family', interdictable=None):
     """
     The QAOA problem for one graph and budget. `lam` is a number, or 'auto'
     for the midpoint of the exact window (run_benchmark.choose_lambda()).
@@ -306,6 +339,10 @@ def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
     is the qubit order: 'family' (variable_order()) or 'rcm' (rcm_order(),
     for matrix-product-state simulation).
 
+    `interdictable` restricts x variables to a piece's owned arcs; other
+    arcs retain their capacities. Its exact window uses the restricted
+    NIP, and decoding/repair keep those fixed arcs intact.
+
     Raises ValueError when the window is empty (no lambda makes the QUBO's
     ground state the optimal interdiction, so there is nothing for QAOA to
     find), when a given `lam` does not encode the optimum, or when the QUBO
@@ -315,7 +352,16 @@ def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
         raise ValueError(f'unknown qubit order {order!r}, expected one of '
                          f'{QUBIT_ORDERS}')
     with contextlib.redirect_stdout(io.StringIO()):  # Gurobi prints every solve
-        curve = rb.optimum_curve(exact_backend, di_g, src_node, tgt_node, B)
+        if interdictable is None:
+            curve = rb.optimum_curve(exact_backend, di_g, src_node, tgt_node, B)
+        else:
+            interdictable = frozenset(interdictable)
+            if not interdictable.issubset(di_g.edges):
+                raise ValueError('interdictable contains an arc outside the graph')
+            if not 0 <= B <= len(interdictable):
+                raise ValueError('piece budget exceeds its interdictable arcs')
+            curve = restricted_optimum_curve(
+                di_g, src_node, tgt_node, interdictable, exact_backend)
     lo, hi = rb.lambda_window(curve, B)
     if lam == 'auto':
         lam = rb.choose_lambda(lo, hi)
@@ -326,7 +372,10 @@ def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
                 f'optimal interdiction (issue #2)')
     lam = float(lam)
 
-    bqm = ni.nip_to_qubo(B, di_g, src_node, tgt_node, lam, lam + 1)
+    if interdictable is not None and not lo < lam < hi:
+        raise ValueError(f'lambda={lam} is outside the window ({lo}, {hi})')
+    bqm = ni.nip_to_qubo(B, di_g, src_node, tgt_node, lam, lam + 1,
+                        interdictable=interdictable)
     if len(bqm.variables) > max_qubits:
         raise ValueError(
             f'{instance} B={B}: the QUBO has {len(bqm.variables)} variables, '
@@ -336,7 +385,8 @@ def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
     problem = NIPQaoaProblem(
         instance=instance, di_g=di_g, src_node=src_node, tgt_node=tgt_node,
         B=B, lam=lam, lambda_window=(lo, hi), bqm=bqm, variables=variables,
-        h=h, J=J, offset=offset, opt_nip=curve[B])
+        h=h, J=J, offset=offset, opt_nip=curve[B],
+        interdictable=interdictable)
 
     if problem.exact:
         ground = int(np.argmin(problem.energies()))
@@ -346,6 +396,12 @@ def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
                 f'({lo}, {hi}); the QUBO ground state is not an optimal '
                 f'interdiction')
         problem.ground_energy = float(problem.energies()[ground])
+    elif interdictable is not None:
+        # Strictly inside the restricted window, every ground state has B
+        # interdictions. The budget term is then zero and beta > lambda
+        # enforces the cut constraints. nip_to_qubo's quadratized penalty
+        # carries a constant -beta for each interdictable arc.
+        problem.ground_energy = float(curve[B] - (lam + 1) * len(interdictable))
     else:
         # exact_reference() raises the same way when the penalised optimum
         # does not decode to an optimal interdiction.
@@ -471,7 +527,8 @@ def score_samples(problem, counts, num_repaired=REPAIRED_SAMPLES):
             before = min(before, flow)
         repaired, flow = ni.improve_dwave_solution(
             problem.di_g, problem.x_vector(bits), problem.src_node,
-            problem.tgt_node, problem.B)
+            problem.tgt_node, problem.B,
+            candidate_edges=problem.interdictable_edges)
         if flow < after:
             after, best_edges = flow, repaired
 
@@ -484,7 +541,8 @@ def score_samples(problem, counts, num_repaired=REPAIRED_SAMPLES):
             continue
         feasible += count
         optimal += count if flow == problem.opt_nip else 0
-        ratio_sum += count * (problem.maxflow - flow) / reduction
+        ratio_sum += count * ((problem.maxflow - flow) / reduction
+                              if reduction else float(flow == problem.opt_nip))
 
     return {
         'best_sample_energy': energy[lowest[0]],
@@ -626,8 +684,10 @@ def run_qaoa(backend, problem, reps, shots=4096, seed=0, maxiter=300,
         uniform_p_optimal=uniform['uniform_p_optimal'],
         shots=shots, sample_time_sec=sample_time, **sampled,
         opt_nip=problem.opt_nip, opt_qubo=problem.ground_energy,
-        greedy=rb.greedy_from_scratch(problem.di_g, problem.src_node,
-                                      problem.tgt_node, problem.B),
+        greedy=ni.improve_dwave_solution(
+            problem.di_g, np.zeros(len(problem.edge_list), dtype=int),
+            problem.src_node, problem.tgt_node, problem.B,
+            candidate_edges=problem.interdictable_edges)[1],
         gap_closed=gap_closed(problem, exact['expected_energy']))
 
 

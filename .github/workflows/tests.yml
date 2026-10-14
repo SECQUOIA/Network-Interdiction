@@ -47,3 +47,21 @@ jobs:
         env:
           REQUIRE_QAOA_BACKENDS: '1'
         run: python -m pytest tests/test_qaoa.py tests/test_qaoa_large.py -v -ra
+
+  transfer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install transfer dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt -r requirements-qaoa.txt -r requirements-transfer.txt pytest
+      - name: Test actual GAT and IBM transfer integrations
+        env:
+          REQUIRE_TRANSFER_BACKENDS: '1'
+          OMP_NUM_THREADS: '1'
+        run: python -m pytest tests/test_parameter_transfer.py -v -ra

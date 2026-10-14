@@ -146,6 +146,75 @@ Limits:
   faster with `OMP_NUM_THREADS=1` at these sizes. On a GPU, pass
   `--target nvidia`, or `--target tensornet-mps` for more qubits.
 
+## Parameter transfer and regularized warm starts
+
+[qaoa_transfer.py](qaoa_transfer.py) transfers schedules at a fixed depth
+through IBM's `TransferTrainer`; [qaoa_gat.py](qaoa_gat.py) adapts the
+[MIS GAT training path](https://github.com/jxsoortha/QAOA-Parameter-Transfer-via-GAT)
+to NIP. Both return `[beta..., gamma...]` for the normalized Hamiltonian
+above, without optimizing a circuit on the target. The IBM dependency is
+pinned to the `provide_params()` API tested here.
+
+The GAT reads the directed flow network: source/sink flags, in/out degrees
+and capacity sums at nodes; capacity, direction and ownership on arcs;
+size, budget fraction, lambda and capacity scale at graph level. Fixed
+boundary arcs remain visible but cannot be interdicted. Three GATv2 layers
+and mean pooling classify a graph into a donor schedule. The training-only
+transfer-energy profiles are clustered, with a medoid schedule per cluster.
+IBM uses nearest graph-level features standardized on the donor bank.
+Neither method averages periodic angles.
+
+Install the optional dependencies and run the controlled comparison:
+
+```bash
+pip install -r requirements.txt -r requirements-qaoa.txt
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements-transfer.txt
+OMP_NUM_THREADS=1 python run_parameter_transfer.py --out results/parameter_transfer.csv
+```
+
+The default experiment trains on 12 weighted two-route networks with four
+vertices, then freezes all models and evaluates six unseen five-vertex
+networks at depths 1 and 2. It compares per-instance COBYLA, the first fixed
+donor, IBM transfer, GAT transfer, and a regularized warm start with a pooled
+training schedule. The CSV reports exact QUBO approximation ratios, energy
+gap closed, optimal-interdiction probability, raw feasibility and repaired
+flow. Training times, every graph and donor angle, and GAT checkpoints are
+saved alongside it. Output files are never overwritten. These small graphs
+test the transfer workflow; they do not establish performance on hard NIP
+instances. Split by graph before adding other budgets to a training bank.
+
+[qaoa_warm_start.py](qaoa_warm_start.py) adapts the regularized product state
+and tilted mixer of [RWS-QAOA](https://arxiv.org/abs/2603.10191) to the NIP
+minimization Hamiltonian. The regularization strength is in normalized
+Hamiltonian units and is separate from the budget penalty. Its fixed
+schedule is trained on the small NIP graphs, not copied from Max-Cut.
+Only the classical product-state optimization is repeated on a target.
+
+`transferred_piece_solver(transfer)` supplies the callback expected by
+`decomposition.solve_decomposed()`, using MPS and returning arcs in the
+original graph. For example, with an `IBMTransfer` or `GATTransfer` model:
+
+```python
+from qaoa_transfer import transferred_piece_solver
+from decomposition import solve_decomposed
+
+solve_piece = transferred_piece_solver(transfer, max_qubits=156)
+cuts, flow = solve_decomposed(graph, src, tgt, pieces, budgets, solve_piece)
+```
+
+Reload a saved training bank with
+`load_donors('results/parameter_transfer.json', reps=1)` from `qaoa_transfer`,
+then construct `IBMTransfer(donors)` or call
+`GATTransfer.load('results/parameter_transfer.p1.gat.json', donors)`.
+
+Each piece gets its own validated penalty window. An empty window is an
+error, not a fallback to a different Hamiltonian. Window selection still
+uses exact classical solves (Gurobi by default), so this integration does
+not yet remove that scaling cost. The GAT and IBM dependencies are optional
+and excluded from the core installation. Run their tests with
+`REQUIRE_TRANSFER_BACKENDS=1 python -m pytest tests/test_parameter_transfer.py`.
+
 ## Mid-size instances and matrix-product-state QAOA
 
 Between `tiny_c` (22 qubits) and `50.planarflow` (912) there were no
