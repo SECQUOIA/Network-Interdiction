@@ -15,6 +15,14 @@ You'll also need:
   tiny models; anything past a few hundred variables/constraints needs a
   real license (academic licenses are free — see
   [Gurobi's site](https://www.gurobi.com/academia/academic-program-and-licenses/)).
+  All production Gurobi models explicitly use eight threads by default,
+  including exact references, penalty checks, Lagrangian solves, and pieces.
+  The timed trajectory solver also defaults to eight; its
+  `--gurobi-threads` option can override that dedicated solve. Thread count
+  is recorded in benchmark headers. Earlier saved timing results retain
+  their original settings and must not be mixed with an eight-thread rerun.
+  NetworkX partitioning, contraction, and max-flow calculations are separate
+  from Gurobi and remain serial.
 - **A D-Wave Leap API token** for the `qa` (real QPU) solver path in
   [solve_qubo_via_dwave.py](solve_qubo_via_dwave.py) — run `dwave setup` from
   the `dwave-ocean-sdk`, or set the `DWAVE_API_TOKEN` env var. The `sa`
@@ -264,6 +272,14 @@ python qaoa_qiskit.py testcases/mid/knn_11_2_s0.flow --budget 2 --reps 1 \
 with the angles trained on `tiny_a` reused unchanged (parameter transfer,
 #16). For comparison, it also trains the angles directly, at every depth, on
 the rows of up to 81 qubits (`--train-max-qubits`).
+
+[results/qaoa_mid.csv](results/qaoa_mid.csv) contains the completed run:
+69 transferred-angle rows (all 23 cases at depths 1, 2 and 3), plus 30
+directly trained rows (the ten cases of at most 81 qubits at those depths).
+These use MPS bond dimension 32, 4096 shots and seed 0; the header identifies
+the clean source commit and command. The simulations are approximate and
+the instances are already solved optimally by greedy, so these rows show
+simulator reach and angle-transfer behavior rather than a quantum advantage.
 
 ## Benchmark results and plots
 

@@ -11,6 +11,17 @@ import random
 import time
 from pyqubo import Binary
 
+DEFAULT_GUROBI_THREADS = 8
+
+
+def _gurobi_model():
+    """Create every NIP model with the same explicit solver thread budget."""
+    model = Model("NIP")
+    model.setParam('OutputFlag', 0)
+    model.setParam('Threads', DEFAULT_GUROBI_THREADS)
+    return model
+
+
 def read_flow_file(filename):
     f = open(filename, 'r')
     g = nx.DiGraph()
@@ -199,8 +210,7 @@ def solve_nip_gurobi_relaxation(G, src_node, tgt_node, B, λ_min, λ_max):
         if len(list_of_λs) > 5:
             list_of_λs.pop(0)
 
-        m = Model("NIP")
-        m.setParam('OutputFlag', 0)
+        m = _gurobi_model()
 
         # Create binary variables x indexed over edges of G
         x = m.addVars(G.edges(), vtype=GRB.BINARY, name='x')
@@ -281,8 +291,7 @@ def gurobi_verify_parameters(G, src_node, tgt_node, B, λ, β):
             total_sum += pi[u].x * (1-pi[v].x) * (1-gamma[u,v].x)
         return total_sum
 
-    m = Model("NIP")
-    m.setParam('OutputFlag', 0)
+    m = _gurobi_model()
 
     x = m.addVars(G.edges(), vtype=GRB.BINARY, name='x')
     gamma = m.addVars(G.edges(), vtype=GRB.BINARY, name='gamma')
@@ -333,15 +342,13 @@ def _build_nip_milp(G, src_node, tgt_node, B, interdictable=None):
     """
     The single-level NIP MILP (Wood 1993): min sum u(1-x)gamma subject to the
     min-cut constraints and sum(x) <= B. Returns (model, x) with the model
-    not yet optimized; OutputFlag is 0.
+    not yet optimized; OutputFlag is 0 and Threads is 8.
 
     `interdictable` (issue #14), when given, is the set of arcs that may be
     cut; every other arc's x is fixed at 0, as nip_to_qubo() does for the
     QUBO. By default every arc may be cut.
     """
-    m = Model("NIP")
-
-    m.setParam('OutputFlag', 0)
+    m = _gurobi_model()
     # m.setParam('PoolSolutions', 5)
 
     # Create binary variables x indexed over edges of G
@@ -423,7 +430,8 @@ def solve_nip_gurobi_trajectory(G, src_node, tgt_node, B, threads=None):
                           Gurobi reports no MIPSOL event, one point at
                           runtime_sec with the final solution.
 
-    ``threads`` sets Gurobi's Threads parameter (all cores when None).
+    ``threads`` overrides Gurobi's Threads parameter. None keeps the
+    repository default of eight; zero explicitly selects Gurobi's auto mode.
     """
     m, x = _build_nip_milp(G, src_node, tgt_node, B)
     if threads is not None:
