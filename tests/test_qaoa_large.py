@@ -217,3 +217,72 @@ def test_mid_script_rows_for_donor_and_trained_angles(tmp_path):
             / (row['offset'] - row['ground_energy']), abs=1e-5)
         assert 0 <= row['shot_p_optimal'] <= row['p_feasible'] <= 1
         assert row['flow_after_repair'] >= row['opt_nip']
+
+
+# --- the committed mid-size results -------------------------------------------------
+
+MID_CSV = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       'results', 'qaoa_mid.csv')
+MANIFEST_CSV = os.path.join(os.path.dirname(MID_CSV), 'mid_instances.csv')
+
+
+@pytest.fixture(scope='module')
+def mid_results():
+    import pandas
+    return (pandas.read_csv(MID_CSV, comment='#'),
+            pandas.read_csv(MANIFEST_CSV, comment='#'))
+
+
+def test_mid_results_cover_every_manifest_row(mid_results):
+    """Transferred angles on every row and depth; training up to 81 qubits."""
+    frame, manifest = mid_results
+    rows = set(zip(manifest['instance'], manifest['B']))
+    for reps in (1, 2, 3):
+        donor = frame[(frame['angles'] == 'donor') & (frame['reps'] == reps)]
+        assert set(zip(donor['instance'], donor['B'])) == rows
+        trained = frame[(frame['angles'] == 'train') & (frame['reps'] == reps)]
+        small = manifest[manifest['qubits'] <= 81]
+        assert set(zip(trained['instance'], trained['B'])) == set(
+            zip(small['instance'], small['B']))
+    assert len(frame) == 3 * len(manifest) + 3 * int((manifest['qubits'] <= 81).sum())
+
+
+def test_mid_results_agree_with_the_manifest_and_donor(mid_results):
+    import json
+    import run_qaoa_mid
+
+    frame, manifest = mid_results
+    donor = run_qaoa_mid.donor_angles()
+    merged = frame.merge(manifest, on=['instance', 'B'], suffixes=('', '_m'))
+    assert len(merged) == len(frame)
+    assert (merged['qubits'] == merged['qubits_m']).all()
+    assert (merged['opt_nip'] == merged['Opt_NIP']).all()
+    assert (merged['greedy'] == merged['Greedy']).all()
+    for _, row in frame[frame['angles'] == 'donor'].iterrows():
+        assert json.loads(row['theta']) == pytest.approx(donor[row['reps']], abs=1e-6)
+        assert row['evaluations'] == 0
+
+
+def test_mid_results_scores_are_self_consistent(mid_results):
+    frame, _ = mid_results
+    gap = (frame['offset'] - frame['expected_energy']) / (
+        frame['offset'] - frame['ground_energy'])
+    assert (gap - frame['gap_closed']).abs().max() < 1e-5
+    assert ((frame['gap_closed'] > 0) & (frame['gap_closed'] < 1)).all()
+    assert (frame['shot_p_optimal'] <= frame['p_feasible']).all()
+    assert (frame['flow_after_repair'] >= frame['opt_nip']).all()
+    assert (frame['bond_dimension'] == 32).all()
+
+
+def test_mid_offsets_rebuild_without_gurobi(mid_results):
+    """offset depends only on the QUBO, rebuilt here from the manifest's lambda."""
+    frame, manifest = mid_results
+    for _, row in manifest.iterrows():
+        di_g, src, tgt = ni.read_flow_file(os.path.join(
+            os.path.dirname(os.path.dirname(MID_CSV)), row['instance']))
+        bqm = ni.nip_to_qubo(int(row['B']), di_g, src, tgt, row['lambda'],
+                             row['lambda'] + 1)
+        _, _, offset = qc.ising_from_bqm(bqm, qc.rcm_order(bqm))
+        recorded = frame[(frame['instance'] == row['instance'])
+                         & (frame['B'] == row['B'])]['offset']
+        assert recorded.to_numpy() == pytest.approx(offset, abs=1e-5)
