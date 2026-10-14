@@ -43,7 +43,7 @@ def test_trajectory_ends_at_the_optimum(name, B):
     """
     require_gurobi()
     g, src, tgt = ni.read_flow_file(tiny(name))
-    result = ni.solve_nip_gurobi_trajectory(g, src, tgt, B, threads=1)
+    result = ni.solve_nip_gurobi_trajectory(g, src, tgt, B)
     trajectory = result['trajectory']
     optimum = rb.brute_force_nip_optimum(g, src, tgt, B)[0]
 
@@ -61,7 +61,7 @@ def test_final_point_is_the_true_flow_of_the_returned_cuts():
     method is scored by, not Gurobi's objective value."""
     require_gurobi()
     g, src, tgt = ni.read_flow_file(tiny('tiny_b'))
-    result = ni.solve_nip_gurobi_trajectory(g, src, tgt, 1, threads=1)
+    result = ni.solve_nip_gurobi_trajectory(g, src, tgt, 1)
     assert result['trajectory'][-1][1] == rb.max_flow(
         g, src, tgt, result['interdicted_edges'])
 

@@ -33,10 +33,9 @@ Random_Greedy   best surviving flow over 20 random interdictions (each arc
                 exactly B arcs by the same greedy pass
 *_time_sec      wall time of each method on this row, in seconds, excluding
                 model/QUBO construction: Gurobi_time_sec is Gurobi's Runtime
-                for a dedicated solve (--gurobi-threads threads, default 1, to
-                match the single-threaded SA and greedy); SA_time_sec is the
-                sampler call and SA_repair_time_sec the decode + repair of its
-                20 best samples
+                for a dedicated solve (--gurobi-threads threads, default 8);
+                SA_time_sec is the sampler call and SA_repair_time_sec the
+                decode + repair of its 20 best samples
 Gurobi_trajectory  JSON list of [seconds, surviving flow] for every incumbent
                 Gurobi found in that dedicated solve (MIPSOL callback); only
                 with --exact gurobi
@@ -374,7 +373,7 @@ def gurobi_trajectory(di_g, src_node, tgt_node, B, threads):
 
 def run_case(instance, B, curr_λ, exact_backend, solvers,
              max_exact_vars=DEFAULT_MAX_EXACT_VARS, baselines=(), rng=None,
-             sa_seed=None, gurobi_threads=1):
+             sa_seed=None, gurobi_threads=ni.DEFAULT_GUROBI_THREADS):
     """
     Compute one CSV row. `instance` is a path to a flow file; `curr_λ` is a
     float or 'auto' (pick it from the exact window, see the module
@@ -593,9 +592,9 @@ def main(argv=None):
         help='seed for simulated annealing and the random baseline '
              '(default: 0)')
     parser.add_argument(
-        '--gurobi-threads', type=int, default=1,
-        help="Threads for the timed Gurobi trajectory solve (default: 1, to "
-             "match the single-threaded SA and greedy; 0 = Gurobi's default)")
+        '--gurobi-threads', type=int, default=ni.DEFAULT_GUROBI_THREADS,
+        help="Threads for the timed Gurobi trajectory solve (default: 8; "
+             "0 = Gurobi's automatic setting). Exact-reference solves use 8.")
     parser.add_argument(
         '--max-exact-vars', type=int, default=DEFAULT_MAX_EXACT_VARS,
         help='refuse --exact brute past this many QUBO variables '
@@ -618,7 +617,7 @@ def main(argv=None):
         rows.append(run_case(instance, B, curr_λ, args.exact, solvers,
                              args.max_exact_vars, baselines, rng,
                              sa_seed=args.seed,
-                             gurobi_threads=args.gurobi_threads or None))
+                             gurobi_threads=args.gurobi_threads))
 
     write_csv(args.out, rows,
               provenance_lines(args, solvers, baselines, rows))

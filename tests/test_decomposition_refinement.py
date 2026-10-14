@@ -242,6 +242,7 @@ def test_benchmark_rows_cover_every_variant(tmp_path):
     out = tmp_path / 'bench.csv'
     assert rdb.main(['--cases', str(cases), '--settings', 'pieces4',
                      '--refine', '--out', str(out)]) == 0
+    assert '# Gurobi Threads: 8; fresh run, no resumed rows' in out.read_text()
     frame = pandas.read_csv(out, comment='#')
     assert list(frame.columns) == rdb.COLUMNS
     # 3 rules x 3 modes, plus the refine row, per budget.
