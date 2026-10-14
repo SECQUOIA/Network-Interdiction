@@ -8,8 +8,9 @@ Gurobi's optimum and greedy for every (instance, B). Each case is
 partitioned two ways:
 
     pieces4   4 pieces (partition_graph()), the setting of #21's table
-    fit156    the fewest pieces whose QUBOs fit 156 qubits, the size of an
-              IBM Heron device (partition_to_fit())
+    fit       the fewest pieces whose QUBOs fit --fit-qubits qubits (156 by
+              default, the size of an IBM Heron device; partition_to_fit()),
+              labelled fit156 in the CSV
 
 and every budget rule (mincut, local, marginal) is solved in every mode
 (independent, sequential, iterated). Each piece is solved exactly
@@ -33,6 +34,11 @@ time_sec                  wall time of the split and the solve; the
                           partition is shared and timed separately
 partition_sec             wall time of that partition
 
+When no partition fits -- a piece whose surroundings cannot be contracted
+keeps most of the graph's nodes, so on 125.planarflow no number of pieces
+gets under 156 qubits -- each case gets one row with rule 'no fit' and the
+rest of the run carries on.
+
 Rows are appended as they finish, so a long run keeps what it has done.
 Needs a Gurobi license.
 
@@ -55,19 +61,22 @@ import network_interdiction as ni
 import run_benchmark as rb
 
 SLIDE_CSV = os.path.join('results', 'slide_instances_sa.csv')
-SETTINGS = ('pieces4', 'fit156')
+SETTINGS = ('pieces4', 'fit')
 IBM_QUBITS = 156
 COLUMNS = ['instance', 'B', 'setting', 'pieces', 'max_piece_qubits', 'rule',
            'mode', 'budgets', 'flow', 'ratio', 'optimum', 'greedy', 'maxflow',
            'time_sec', 'partition_sec']
 
 
-def partition(setting, di_g, src, tgt, seed=0):
-    """(pieces, largest piece QUBO) for a setting."""
+def partition(setting, di_g, src, tgt, fit_qubits=IBM_QUBITS, seed=0):
+    """
+    (pieces, largest piece QUBO) for a setting. Raises ValueError from
+    partition_to_fit() when no partition fits `fit_qubits`.
+    """
     if setting == 'pieces4':
         pieces = dc.partition_graph(di_g, 4, seed=seed)
-    elif setting == 'fit156':
-        pieces, _ = dc.partition_to_fit(di_g, src, tgt, IBM_QUBITS, seed=seed)
+    elif setting == 'fit':
+        pieces, _ = dc.partition_to_fit(di_g, src, tgt, fit_qubits, seed=seed)
     else:
         raise ValueError(f'unknown setting {setting!r}')
     sizes = [dc.piece_qubo_size(dc.piece_subproblem(di_g, src, tgt, pieces, i))
@@ -105,6 +114,8 @@ def main(argv=None):
     parser.add_argument('--settings', default=','.join(SETTINGS))
     parser.add_argument('--refine', action='store_true',
                         help='add refine_split() rows (4-piece setting)')
+    parser.add_argument('--fit-qubits', type=int, default=IBM_QUBITS,
+                        help='qubit limit of the fit setting (default 156)')
     parser.add_argument('--out', required=True)
     args = parser.parse_args(argv)
     settings = args.settings.split(',')
@@ -124,8 +135,23 @@ def main(argv=None):
         for instance, group in cases.groupby('instance', sort=False):
             di_g, src, tgt = ni.read_flow_file(instance)
             for setting in settings:
+                label = (setting if setting != 'fit'
+                         else f'fit{args.fit_qubits}')
                 start = time.perf_counter()
-                pieces, largest = partition(setting, di_g, src, tgt)
+                try:
+                    pieces, largest = partition(setting, di_g, src, tgt,
+                                                args.fit_qubits)
+                except ValueError as error:
+                    for case in group.itertuples():
+                        writer.writerow({
+                            'instance': instance, 'B': case.B,
+                            'setting': label, 'pieces': 0, 'rule': 'no fit',
+                            'optimum': case.Opt_NIP, 'greedy': case.Greedy,
+                            'maxflow': case.maxflow,
+                            'partition_sec': round(time.perf_counter() - start, 3)})
+                    handle.flush()
+                    print(f'{instance} {label}: {error}', flush=True)
+                    continue
                 partition_time = time.perf_counter() - start
                 for case in group.itertuples():
                     with contextlib.redirect_stdout(io.StringIO()):
@@ -135,7 +161,7 @@ def main(argv=None):
                     for rule, mode, budgets, flow, seconds in rows:
                         writer.writerow({
                             'instance': instance, 'B': case.B,
-                            'setting': setting, 'pieces': len(pieces),
+                            'setting': label, 'pieces': len(pieces),
                             'max_piece_qubits': largest, 'rule': rule,
                             'mode': mode, 'budgets': json.dumps(budgets),
                             'flow': flow,
@@ -146,7 +172,7 @@ def main(argv=None):
                             'partition_sec': round(partition_time, 3)})
                     handle.flush()
                     best = min(row[3] for row in rows)
-                    print(f'{instance} B={case.B} {setting} ({len(pieces)} '
+                    print(f'{instance} B={case.B} {label} ({len(pieces)} '
                           f'pieces, <= {largest} qubits): best {best}, '
                           f'optimum {case.Opt_NIP}, greedy {case.Greedy}',
                           flush=True)

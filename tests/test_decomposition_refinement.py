@@ -258,6 +258,30 @@ def test_benchmark_rows_cover_every_variant(tmp_path):
                     'flow'].item()
 
 
+@needs_gurobi
+def test_benchmark_records_a_limit_nothing_fits_and_carries_on(tmp_path):
+    import pandas
+    import run_decomposition_benchmark as rdb
+
+    instance = os.path.join(REPO_ROOT, 'testcases', 'tiny_b.flow')
+    g, s, t = ni.read_flow_file(instance)
+    cases = tmp_path / 'cases.csv'
+    cases.write_text('instance,B,Opt_NIP,Greedy,maxflow\n' + ''.join(
+        f'{instance},{B},{optimum(g, s, t, B)},'
+        f'{rb.greedy_from_scratch(g, s, t, B)},{rb.max_flow(g, s, t)}\n'
+        for B in (1, 2)))
+    out = tmp_path / 'bench.csv'
+    assert rdb.main(['--cases', str(cases), '--settings', 'fit,pieces4',
+                     '--fit-qubits', '3', '--out', str(out)]) == 0
+    frame = pandas.read_csv(out, comment='#')
+    no_fit = frame[frame['setting'] == 'fit3']
+    assert list(no_fit['rule']) == ['no fit', 'no fit']
+    assert list(no_fit['B']) == [1, 2] and (no_fit['pieces'] == 0).all()
+    assert no_fit['flow'].isna().all()
+    # The 4-piece setting still ran: 3 rules x 3 modes per budget.
+    assert len(frame[frame['setting'] == 'pieces4']) == 2 * 9
+
+
 def test_partition_to_fit_reports_a_limit_nothing_meets():
     g, s, t, _, _ = MARGINAL
     with pytest.raises(ValueError, match='fits 3 qubits'):
