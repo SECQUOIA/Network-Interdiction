@@ -249,6 +249,14 @@ def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
     find), when a given `lam` does not encode the optimum, or when the QUBO
     is over `max_qubits`.
     """
+    # Enforce the simulation limit before the combinatorial reference scan.
+    # Compile with positive placeholder penalties to count the actual QUBO
+    # variables, including auxiliaries, without first solving for lambda.
+    sizing_bqm = ni.nip_to_qubo(B, di_g, src_node, tgt_node, 1.0, 2.0)
+    if len(sizing_bqm.variables) > max_qubits:
+        raise ValueError(
+            f'{instance} B={B}: the QUBO has {len(sizing_bqm.variables)} variables, '
+            f'over the statevector limit of {max_qubits} qubits')
     curve = rb.optimum_curve('brute', di_g, src_node, tgt_node, B)
     lo, hi = rb.lambda_window(curve, B)
     if lam == 'auto':
@@ -259,6 +267,10 @@ def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
                 f'interior, so no lambda makes the QUBO ground state the '
                 f'optimal interdiction (issue #2)')
     lam = float(lam)
+    if not math.isfinite(lam) or not lo < lam < hi:
+        raise ValueError(
+            f'{instance} B={B}: lambda={lam} is outside the window '
+            f'({lo}, {hi}); a finite, strictly interior value is required')
 
     bqm = ni.nip_to_qubo(B, di_g, src_node, tgt_node, lam, lam + 1)
     if len(bqm.variables) > max_qubits:
@@ -272,8 +284,9 @@ def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
         B=B, lam=lam, lambda_window=(lo, hi), bqm=bqm, variables=variables,
         h=h, J=J, offset=offset, opt_nip=curve[B])
 
-    ground = int(np.argmin(problem.energies()))
-    if not problem.optimal_mask()[ground]:
+    energies = problem.energies()
+    ground = energies <= energies.min() + ENERGY_TOL
+    if not np.all(problem.optimal_mask()[ground]):
         raise ValueError(
             f'{instance} B={B}: lambda={lam} is outside the window '
             f'({lo}, {hi}); the QUBO ground state is not an optimal '
