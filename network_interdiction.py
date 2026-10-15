@@ -1086,7 +1086,7 @@ def solve_nip_qubo_repair_once_end(name, di_g, λ_min, λ_max, src_node, tgt_nod
     # print('------------------------------------')
 
 def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_penalty_coeff,
-                interdictable=None):
+                interdictable=None, *, budget_penalty='linear'):
     """
     Build the NIP as a BQM: x_i (interdict), gamma_i (arc in the cut) and
     w_i (the auxiliary that quadratises the cut constraint) for arc i of
@@ -1103,7 +1103,15 @@ def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_pen
     while leaving its ground state the piece's restricted optimum. The
     x_i/gamma_i/w_i names of the arcs that remain keep their index in the
     full sorted edge list, so a sample decodes the same way either way.
+
+    `budget_penalty='linear'` preserves the Lagrangian term λ(Σx-B).
+    The opt-in 'squared' form uses λ(Σx-B)² and adds a clique among the
+    interdiction variables. It enforces exactly B, not all assignments with
+    at most B. See certified_penalties.certified_squared_qubo for validated
+    closed-form coefficients; β > λ alone is not its safety condition.
     """
+    if budget_penalty not in ('linear', 'squared'):
+        raise ValueError("budget_penalty must be 'linear' or 'squared'")
     num_nodes = len(di_g.nodes())
     num_edges = len(di_g.edges())
 
@@ -1135,8 +1143,10 @@ def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_pen
         if unknown:
             raise ValueError(f"interdictable arcs not in the graph: {sorted(unknown)}")
 
+    mismatch = sum(var_x[i] for i in range(num_edges)
+                   if edge_list[i] in interdictable) - B
     obj = cardinality_penalty_coeff * (
-        sum(var_x[i] for i in range(num_edges) if edge_list[i] in interdictable) - B)
+        mismatch if budget_penalty == 'linear' else mismatch ** 2)
 
     for i in range(len(edge_list)):
         (u,v) = edge_list[i]
@@ -1162,6 +1172,8 @@ def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_pen
         obj += di_g[u][v]['weight'] * (1 - var_x[i]) * var_gamma[i]
         obj += dual_penalty_coeff * (temp_pi_u - temp_pi_u * temp_pi_v - temp_pi_u * var_gamma[i] + var_w[i] * (temp_pi_u + temp_pi_v + var_gamma[i] - 1) + (temp_pi_u * temp_pi_v + temp_pi_u * var_gamma[i] + temp_pi_v * var_gamma[i]) - (temp_pi_u + temp_pi_v + var_gamma[i]))
 
+    if isinstance(obj, (int, float)):
+        return dimod.BinaryQuadraticModel({}, {}, float(obj), dimod.BINARY)
     model = obj.compile()
     bqm = model.to_bqm()
     return bqm
