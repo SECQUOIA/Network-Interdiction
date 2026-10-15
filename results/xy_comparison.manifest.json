@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "result_file": "xy_comparison.json",
+  "result_sha256": "1b5f51636956ae4ab0d243c21423f8f3a30524dc8ab7529ab8bbdb868a3d53df",
+  "producer_commit": "73502996f878027e4360ed9bd1e52e285fab825e",
+  "completed_attempts": 1,
+  "failed_attempts": 0,
+  "outer_seconds_limit": 600,
+  "memory_limit_gib": 8,
+  "native_thread_environment": {
+    "OMP_NUM_THREADS": 1,
+    "OPENBLAS_NUM_THREADS": 1,
+    "MKL_NUM_THREADS": 1
+  },
+  "milp_threads": 8,
+  "completed_milp_references": 3,
+  "completed_sampler_methods": 10,
+  "inapplicable_linear_methods": 2,
+  "hardware_runs": 0,
+  "raw_log_sha256": "49d3054a9fa9580f23eb86fc71bbe394706e702fbfaeed5cc20cd78e06e62401",
+  "pilot_excluded": "Earlier tiny_a B1 exploratory pilot used 128 shots, 4 evaluations and seed2; none of its measurements are in this saved campaign."
+}

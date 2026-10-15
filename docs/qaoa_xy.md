@@ -127,3 +127,52 @@ separately retained; the first quantum method also pays lazy backend import
 costs. A single seeded run is a feasibility check, not statistical evidence
 of a speed or quality advantage. Hard-instance and larger-scale comparisons
 remain a separate part of the software series; no hardware is run here.
+
+### Saved three-case run
+
+[`results/xy_comparison.json`](../results/xy_comparison.json) retains all
+counts from tiny_a (B=1, 14 qubits), tiny_b (B=2, 21 qubits), and equal_paths
+(B=1, 14 qubits). The [execution manifest](../results/xy_comparison.manifest.json)
+records one successful attempt, the result hash, a 600-second outer limit,
+an 8 GiB process limit and single-thread native-library settings. Each
+quantum run used p=1, 20 COBYLA evaluations at most, 1,024 shots and seed 0;
+SA used 1,024 reads and 1,000 sweeps. Source hashes bind the run to commit
+`73502996f878027e4360ed9bd1e52e285fab825e`.
+
+| Method | Optimal shots / 1,024: tiny_a | Optimal shots / 1,024: tiny_b | Logical depth: tiny_a / tiny_b |
+|---|---:|---:|---:|
+| SA | 1,024 | 752 | — |
+| Penalty QAOA | 220 | 94 | 10 / 10 |
+| XY, basis start | 514 | 286 | 21 / 21 |
+| XY, Dicke start | 574 | 265 | 85 / 361 |
+
+Both XY variants had exactly B interdictions in every retained shot. The
+penalty variant had exactly B in 382/1,024 shots on tiny_a and 284/1,024 on
+tiny_b; its at-most-B feasibility was 533/1,024 and 436/1,024, respectively.
+All completed methods found optimal flow 5 among the selected raw samples
+and after repair. SA produced more optimal shots than either quantum variant
+on the two ordinary tiny cases. On tiny_b, Dicke's 265 optimal shots were
+also close to the uniform fixed-budget baseline of 4/15, rather than evidence
+of a useful trained improvement.
+
+The basis start's first B arcs already attained optimum flow on all three
+cases. Every fixed-budget cut in equal_paths is optimal, so its 1,024/1,024
+optimal XY shots demonstrate feasibility through an empty linear window,
+not optimization performance. The linear methods are explicitly omitted
+there because no strict window exists. The original Gurobi references and
+exhaustive arc-subset values agree on all three cases.
+
+Dicke synthesis costs are visible: its two-qubit counts were 33/90 on the
+two ordinary cases, versus 22/33 for the basis-start XY circuit and 14/21
+for penalty QAOA. On tiny_b, the sampling pipelines took about 0.25 s (SA),
+12.96 s (penalty), 14.20 s (XY basis), and 22.44 s (XY Dicke). These single
+runs and logical circuits are not a device-time or hardware-fit claim.
+
+Reproduce from the repository root with a fresh output path:
+
+```sh
+python run_xy_comparison.py \
+  --case testcases/tiny_a.flow:1 --case testcases/tiny_b.flow:2 \
+  --case testcases/equal_paths.flow:1 --reps 1 --shots 1024 \
+  --maxiter 20 --seed 0 --out /tmp/xy-comparison.json
+```
