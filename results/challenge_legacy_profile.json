@@ -1,0 +1,3918 @@
+{
+  "schema": 1,
+  "source_commit": "b05c943589900c133d7e3383026c6233b31ebe40",
+  "source_hashes": {
+    "run_challenge_profile.py": "62198ab1b507f6e40d19398d40e1d9b4264c99f6c0ca622712414f8d952b15d9",
+    "challenge_instances.py": "a170b696a57d50acecc6b51234b4bbc97bf607751b9a6f10bbcef9089e136bc9",
+    "benders.py": "e7263d9713511a211b60b9b8e3cceda6b876e40ed4e07bf35e24176651258e1d",
+    "classical_baselines.py": "3d29bbe3cd8c297b5bc7a33d811b27d4b72cf75e47e8c1de6f15de136f9efd38",
+    "network_interdiction.py": "925129950e4d58b1547dcf93b7c3ad4f0e9f6f7916ceb127e144846a55beeaf8"
+  },
+  "manifest_sha256": "80122c692c88d1877a231bcd462c16e10cea2f0804a442f4d8462179d264c7b1",
+  "versions": {
+    "gurobipy": "13.0.3",
+    "networkx": "3.7",
+    "numpy": "1.26.4",
+    "pyqubo": "1.5.0",
+    "dimod": "0.12.22"
+  },
+  "python": "3.12.12",
+  "machine": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu_model": "Intel(R) Xeon(R) w5-2565X",
+  "thread_environment": {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1"
+  },
+  "settings": {
+    "time_limit_per_solver_sec": 20.0,
+    "threads": 8,
+    "strain_seconds": 5,
+    "repetitions": 1,
+    "seed": 0,
+    "max_cases": 24,
+    "max_nodes": 1000,
+    "max_arcs": 4000,
+    "benders_max_iterations": 1000
+  },
+  "attempts": [
+    {
+      "attempt": 1,
+      "status": "completed",
+      "completed_solver_calls": 32
+    }
+  ],
+  "cases": [
+    {
+      "name": "75.planarflow",
+      "family": "planar",
+      "B": 3,
+      "file": "../75.planarflow",
+      "sha256": "a9903438795d39649829e5c80005d18f6c0042f4299207a0b6d9cd1a5b648146",
+      "nodes": 75,
+      "arcs": 438,
+      "allowed_arcs": 438,
+      "qubits": 1387,
+      "planar_undirected": true,
+      "source_out_degree": 16,
+      "sink_in_degree": 15,
+      "couplings": 2693,
+      "qubo_compile_sec": 0.031664977002947126,
+      "source": 5,
+      "sink": 3,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 399,
+        "interdicted_edges": [
+          [
+            2,
+            3
+          ],
+          [
+            5,
+            3
+          ],
+          [
+            15,
+            3
+          ]
+        ],
+        "lower_bound": 399.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.2741410732269287,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.26807379722595215,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 23328.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.2741410732269287,
+            "lower_bound": 399.0,
+            "milp_incumbent_objective": 399.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.25008487701416016,
+            "interdicted_edges": [],
+            "flow": 634
+          },
+          {
+            "solver_time_sec": 0.26164698600769043,
+            "interdicted_edges": [],
+            "flow": 634
+          },
+          {
+            "solver_time_sec": 0.2724728584289551,
+            "interdicted_edges": [
+              [
+                2,
+                3
+              ],
+              [
+                5,
+                3
+              ],
+              [
+                15,
+                3
+              ]
+            ],
+            "flow": 399
+          },
+          {
+            "solver_time_sec": 0.2741410732269287,
+            "interdicted_edges": [
+              [
+                2,
+                3
+              ],
+              [
+                5,
+                3
+              ],
+              [
+                15,
+                3
+              ]
+            ],
+            "flow": 399
+          }
+        ],
+        "runtime_sec": 0.2921100860039587,
+        "audit_time_sec": 0.009706723998533562,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 3
+      },
+      "benders": {
+        "flow": 399,
+        "interdicted_edges": [
+          [
+            2,
+            3
+          ],
+          [
+            5,
+            3
+          ],
+          [
+            15,
+            3
+          ]
+        ],
+        "lower_bound": 399.0,
+        "status": "optimal",
+        "iterations": 5,
+        "cut_count": 5,
+        "runtime_sec": 0.11301426999852993,
+        "master_time_sec": 0.020611746003851295,
+        "node_count": 5.0,
+        "subproblem_time_sec": 0.08699175399669912,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 355.0,
+            "flow": 634,
+            "best_flow": 634,
+            "time_sec": 0.011964971999987029,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 390.0,
+            "flow": 553,
+            "best_flow": 553,
+            "time_sec": 0.02026486899558222,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 399.0,
+            "flow": 480,
+            "best_flow": 480,
+            "time_sec": 0.02909421399817802,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 399.0,
+            "flow": 474,
+            "best_flow": 474,
+            "time_sec": 0.03867680599796586,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 5,
+            "lower_bound": 399.0,
+            "flow": 399,
+            "best_flow": 399,
+            "time_sec": 0.11276635099784471,
+            "master_status": 2,
+            "master_nodes": 1.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 3,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    },
+    {
+      "name": "75.planarflow",
+      "family": "planar",
+      "B": 6,
+      "file": "../75.planarflow",
+      "sha256": "a9903438795d39649829e5c80005d18f6c0042f4299207a0b6d9cd1a5b648146",
+      "nodes": 75,
+      "arcs": 438,
+      "allowed_arcs": 438,
+      "qubits": 1387,
+      "planar_undirected": true,
+      "source_out_degree": 16,
+      "sink_in_degree": 15,
+      "couplings": 2693,
+      "qubo_compile_sec": 0.023482349002733827,
+      "source": 5,
+      "sink": 3,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 237,
+        "interdicted_edges": [
+          [
+            2,
+            3
+          ],
+          [
+            5,
+            3
+          ],
+          [
+            10,
+            3
+          ],
+          [
+            15,
+            3
+          ],
+          [
+            44,
+            3
+          ],
+          [
+            65,
+            3
+          ]
+        ],
+        "lower_bound": 237.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.029311180114746094,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.021763086318969727,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 23328.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.029311180114746094,
+            "lower_bound": 237.0,
+            "milp_incumbent_objective": 237.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.0002601146697998047,
+            "interdicted_edges": [],
+            "flow": 634
+          },
+          {
+            "solver_time_sec": 0.014788150787353516,
+            "interdicted_edges": [],
+            "flow": 634
+          },
+          {
+            "solver_time_sec": 0.028027057647705078,
+            "interdicted_edges": [
+              [
+                2,
+                3
+              ],
+              [
+                5,
+                3
+              ],
+              [
+                10,
+                3
+              ],
+              [
+                15,
+                3
+              ],
+              [
+                44,
+                3
+              ],
+              [
+                65,
+                3
+              ]
+            ],
+            "flow": 237
+          },
+          {
+            "solver_time_sec": 0.029311180114746094,
+            "interdicted_edges": [
+              [
+                2,
+                3
+              ],
+              [
+                5,
+                3
+              ],
+              [
+                10,
+                3
+              ],
+              [
+                15,
+                3
+              ],
+              [
+                44,
+                3
+              ],
+              [
+                65,
+                3
+              ]
+            ],
+            "flow": 237
+          }
+        ],
+        "runtime_sec": 0.04203661499923328,
+        "audit_time_sec": 0.008657592996314634,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 6
+      },
+      "benders": {
+        "flow": 237,
+        "interdicted_edges": [
+          [
+            2,
+            3
+          ],
+          [
+            5,
+            3
+          ],
+          [
+            10,
+            3
+          ],
+          [
+            15,
+            3
+          ],
+          [
+            44,
+            3
+          ],
+          [
+            65,
+            3
+          ]
+        ],
+        "lower_bound": 237.0,
+        "status": "optimal",
+        "iterations": 7,
+        "cut_count": 7,
+        "runtime_sec": 0.09953992399823619,
+        "master_time_sec": 0.07443996300571598,
+        "node_count": 7.0,
+        "subproblem_time_sec": 0.019742813994525932,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 101.0,
+            "flow": 634,
+            "best_flow": 634,
+            "time_sec": 0.008953049000410829,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 172.0,
+            "flow": 399,
+            "best_flow": 399,
+            "time_sec": 0.015543305002211127,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 182.0,
+            "flow": 474,
+            "best_flow": 399,
+            "time_sec": 0.022403342001780402,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 200.0,
+            "flow": 559,
+            "best_flow": 399,
+            "time_sec": 0.03566661699733231,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 5,
+            "lower_bound": 229.0,
+            "flow": 417,
+            "best_flow": 399,
+            "time_sec": 0.054273538997222204,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 6,
+            "lower_bound": 231.0,
+            "flow": 573,
+            "best_flow": 399,
+            "time_sec": 0.07880048399965744,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 7,
+            "lower_bound": 237.0,
+            "flow": 237,
+            "best_flow": 237,
+            "time_sec": 0.09935068699996918,
+            "master_status": 2,
+            "master_nodes": 1.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 6,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    },
+    {
+      "name": "125.planarflow",
+      "family": "planar",
+      "B": 3,
+      "file": "../125.planarflow",
+      "sha256": "04920fe0100dec13b6de11a1b45f14feb1cde89f0b925300c3a1f1a18e2fb16e",
+      "nodes": 125,
+      "arcs": 738,
+      "allowed_arcs": 738,
+      "qubits": 2337,
+      "planar_undirected": true,
+      "source_out_degree": 27,
+      "sink_in_degree": 16,
+      "couplings": 4582,
+      "qubo_compile_sec": 0.03866328499861993,
+      "source": 2,
+      "sink": 0,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 547,
+        "interdicted_edges": [
+          [
+            8,
+            0
+          ],
+          [
+            42,
+            0
+          ],
+          [
+            62,
+            0
+          ]
+        ],
+        "lower_bound": 547.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.035043954849243164,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.02685689926147461,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 39532.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.035043954849243164,
+            "lower_bound": 547.0,
+            "milp_incumbent_objective": 547.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.00047206878662109375,
+            "interdicted_edges": [],
+            "flow": 818
+          },
+          {
+            "solver_time_sec": 0.01735210418701172,
+            "interdicted_edges": [],
+            "flow": 818
+          },
+          {
+            "solver_time_sec": 0.03331899642944336,
+            "interdicted_edges": [
+              [
+                8,
+                0
+              ],
+              [
+                42,
+                0
+              ],
+              [
+                62,
+                0
+              ]
+            ],
+            "flow": 547
+          },
+          {
+            "solver_time_sec": 0.035043954849243164,
+            "interdicted_edges": [
+              [
+                8,
+                0
+              ],
+              [
+                42,
+                0
+              ],
+              [
+                62,
+                0
+              ]
+            ],
+            "flow": 547
+          }
+        ],
+        "runtime_sec": 0.052528263004205655,
+        "audit_time_sec": 0.01599844600423239,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 3
+      },
+      "benders": {
+        "flow": 547,
+        "interdicted_edges": [
+          [
+            8,
+            0
+          ],
+          [
+            42,
+            0
+          ],
+          [
+            62,
+            0
+          ]
+        ],
+        "lower_bound": 547.0,
+        "status": "optimal",
+        "iterations": 11,
+        "cut_count": 11,
+        "runtime_sec": 0.20296452699403744,
+        "master_time_sec": 0.12743436501477845,
+        "node_count": 10.0,
+        "subproblem_time_sec": 0.0630257889861241,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 524.0,
+            "flow": 818,
+            "best_flow": 818,
+            "time_sec": 0.012351555997156538,
+            "master_status": 2,
+            "master_nodes": 0.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 530.0,
+            "flow": 721,
+            "best_flow": 721,
+            "time_sec": 0.01997068099444732,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 531.0,
+            "flow": 626,
+            "best_flow": 626,
+            "time_sec": 0.02980252799898153,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 532.0,
+            "flow": 723,
+            "best_flow": 626,
+            "time_sec": 0.03890516499814112,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 5,
+            "lower_bound": 535.0,
+            "flow": 626,
+            "best_flow": 626,
+            "time_sec": 0.0490420889982488,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 6,
+            "lower_bound": 535.0,
+            "flow": 721,
+            "best_flow": 626,
+            "time_sec": 0.05920503899687901,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 7,
+            "lower_bound": 542.0,
+            "flow": 626,
+            "best_flow": 626,
+            "time_sec": 0.08417742299934616,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 8,
+            "lower_bound": 543.0,
+            "flow": 626,
+            "best_flow": 626,
+            "time_sec": 0.10988586199528072,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 9,
+            "lower_bound": 544.0,
+            "flow": 626,
+            "best_flow": 626,
+            "time_sec": 0.141028075995564,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 10,
+            "lower_bound": 545.0,
+            "flow": 818,
+            "best_flow": 626,
+            "time_sec": 0.18220940399623942,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 11,
+            "lower_bound": 547.0,
+            "flow": 547,
+            "best_flow": 547,
+            "time_sec": 0.20269090999499895,
+            "master_status": 2,
+            "master_nodes": 1.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 3,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    },
+    {
+      "name": "125.planarflow",
+      "family": "planar",
+      "B": 6,
+      "file": "../125.planarflow",
+      "sha256": "04920fe0100dec13b6de11a1b45f14feb1cde89f0b925300c3a1f1a18e2fb16e",
+      "nodes": 125,
+      "arcs": 738,
+      "allowed_arcs": 738,
+      "qubits": 2337,
+      "planar_undirected": true,
+      "source_out_degree": 27,
+      "sink_in_degree": 16,
+      "couplings": 4582,
+      "qubo_compile_sec": 0.037410826997074764,
+      "source": 2,
+      "sink": 0,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 328,
+        "interdicted_edges": [
+          [
+            8,
+            0
+          ],
+          [
+            9,
+            0
+          ],
+          [
+            10,
+            0
+          ],
+          [
+            24,
+            0
+          ],
+          [
+            42,
+            0
+          ],
+          [
+            62,
+            0
+          ]
+        ],
+        "lower_bound": 328.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.035130977630615234,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.02591085433959961,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 39532.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.035130977630615234,
+            "lower_bound": 328.0,
+            "milp_incumbent_objective": 328.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.0003209114074707031,
+            "interdicted_edges": [],
+            "flow": 818
+          },
+          {
+            "solver_time_sec": 0.01603388786315918,
+            "interdicted_edges": [],
+            "flow": 818
+          },
+          {
+            "solver_time_sec": 0.03397178649902344,
+            "interdicted_edges": [
+              [
+                8,
+                0
+              ],
+              [
+                9,
+                0
+              ],
+              [
+                10,
+                0
+              ],
+              [
+                24,
+                0
+              ],
+              [
+                42,
+                0
+              ],
+              [
+                62,
+                0
+              ]
+            ],
+            "flow": 328
+          },
+          {
+            "solver_time_sec": 0.035130977630615234,
+            "interdicted_edges": [
+              [
+                8,
+                0
+              ],
+              [
+                9,
+                0
+              ],
+              [
+                10,
+                0
+              ],
+              [
+                24,
+                0
+              ],
+              [
+                42,
+                0
+              ],
+              [
+                62,
+                0
+              ]
+            ],
+            "flow": 328
+          }
+        ],
+        "runtime_sec": 0.051905070002248976,
+        "audit_time_sec": 0.01724753700545989,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 6
+      },
+      "benders": {
+        "flow": 328,
+        "interdicted_edges": [
+          [
+            8,
+            0
+          ],
+          [
+            9,
+            0
+          ],
+          [
+            10,
+            0
+          ],
+          [
+            24,
+            0
+          ],
+          [
+            42,
+            0
+          ],
+          [
+            62,
+            0
+          ]
+        ],
+        "lower_bound": 328.0,
+        "status": "optimal",
+        "iterations": 10,
+        "cut_count": 10,
+        "runtime_sec": 0.4172333989990875,
+        "master_time_sec": 0.351098320010351,
+        "node_count": 478.0,
+        "subproblem_time_sec": 0.05473409899423132,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 235.0,
+            "flow": 721,
+            "best_flow": 721,
+            "time_sec": 0.01317813200148521,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 244.0,
+            "flow": 723,
+            "best_flow": 721,
+            "time_sec": 0.021929752998403274,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 268.0,
+            "flow": 818,
+            "best_flow": 721,
+            "time_sec": 0.03500158299721079,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 292.0,
+            "flow": 721,
+            "best_flow": 721,
+            "time_sec": 0.04950916999951005,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 5,
+            "lower_bound": 311.0,
+            "flow": 661,
+            "best_flow": 661,
+            "time_sec": 0.0752635660028318,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 6,
+            "lower_bound": 318.0,
+            "flow": 469,
+            "best_flow": 469,
+            "time_sec": 0.11210974399728002,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 7,
+            "lower_bound": 319.0,
+            "flow": 564,
+            "best_flow": 469,
+            "time_sec": 0.16102348000276834,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 8,
+            "lower_bound": 323.0,
+            "flow": 547,
+            "best_flow": 469,
+            "time_sec": 0.23111284199694637,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 9,
+            "lower_bound": 325.0,
+            "flow": 723,
+            "best_flow": 469,
+            "time_sec": 0.31346889700216707,
+            "master_status": 2,
+            "master_nodes": 228.0
+          },
+          {
+            "iteration": 10,
+            "lower_bound": 328.0,
+            "flow": 328,
+            "best_flow": 328,
+            "time_sec": 0.41676080800243653,
+            "master_status": 2,
+            "master_nodes": 242.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 6,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    },
+    {
+      "name": "150.planarflow",
+      "family": "planar",
+      "B": 3,
+      "file": "../150.planarflow",
+      "sha256": "212fc912c23be0f8beacf98aea3f3b8955b05227ff51a22ab25ce5c575e386bc",
+      "nodes": 150,
+      "arcs": 888,
+      "allowed_arcs": 888,
+      "qubits": 2812,
+      "planar_undirected": true,
+      "source_out_degree": 26,
+      "sink_in_degree": 25,
+      "couplings": 5518,
+      "qubo_compile_sec": 0.06792274200415704,
+      "source": 10,
+      "sink": 0,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 909,
+        "interdicted_edges": [
+          [
+            10,
+            125
+          ],
+          [
+            104,
+            0
+          ],
+          [
+            135,
+            8
+          ]
+        ],
+        "lower_bound": 909.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.05115199089050293,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.04057717323303223,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 48969.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.05115199089050293,
+            "lower_bound": 909.0,
+            "milp_incumbent_objective": 909.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.0003330707550048828,
+            "interdicted_edges": [],
+            "flow": 1172
+          },
+          {
+            "solver_time_sec": 0.02547907829284668,
+            "interdicted_edges": [],
+            "flow": 1172
+          },
+          {
+            "solver_time_sec": 0.049154043197631836,
+            "interdicted_edges": [
+              [
+                10,
+                125
+              ],
+              [
+                104,
+                0
+              ],
+              [
+                135,
+                8
+              ]
+            ],
+            "flow": 909
+          },
+          {
+            "solver_time_sec": 0.05115199089050293,
+            "interdicted_edges": [
+              [
+                10,
+                125
+              ],
+              [
+                104,
+                0
+              ],
+              [
+                135,
+                8
+              ]
+            ],
+            "flow": 909
+          }
+        ],
+        "runtime_sec": 0.07953629599796841,
+        "audit_time_sec": 0.012160673999460414,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": false,
+        "terminal_incident_count": 2
+      },
+      "benders": {
+        "flow": 909,
+        "interdicted_edges": [
+          [
+            10,
+            125
+          ],
+          [
+            104,
+            0
+          ],
+          [
+            135,
+            8
+          ]
+        ],
+        "lower_bound": 909.0,
+        "status": "optimal",
+        "iterations": 8,
+        "cut_count": 8,
+        "runtime_sec": 0.0844503309999709,
+        "master_time_sec": 0.03447617098572664,
+        "node_count": 7.0,
+        "subproblem_time_sec": 0.040568464995885734,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 877.0,
+            "flow": 1172,
+            "best_flow": 1172,
+            "time_sec": 0.012483405997045338,
+            "master_status": 2,
+            "master_nodes": 0.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 893.0,
+            "flow": 1080,
+            "best_flow": 1080,
+            "time_sec": 0.020317726994107943,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 897.0,
+            "flow": 1172,
+            "best_flow": 1080,
+            "time_sec": 0.02790547000040533,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 905.0,
+            "flow": 1082,
+            "best_flow": 1080,
+            "time_sec": 0.03769715399539564,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 5,
+            "lower_bound": 905.0,
+            "flow": 1043,
+            "best_flow": 1043,
+            "time_sec": 0.04812743699585553,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 6,
+            "lower_bound": 908.0,
+            "flow": 996,
+            "best_flow": 996,
+            "time_sec": 0.0601698469981784,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 7,
+            "lower_bound": 909.0,
+            "flow": 949,
+            "best_flow": 949,
+            "time_sec": 0.0728840579977259,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 8,
+            "lower_bound": 909.0,
+            "flow": 909,
+            "best_flow": 909,
+            "time_sec": 0.08415672399860341,
+            "master_status": 2,
+            "master_nodes": 1.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": false,
+        "terminal_incident_count": 2,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    },
+    {
+      "name": "150.planarflow",
+      "family": "planar",
+      "B": 6,
+      "file": "../150.planarflow",
+      "sha256": "212fc912c23be0f8beacf98aea3f3b8955b05227ff51a22ab25ce5c575e386bc",
+      "nodes": 150,
+      "arcs": 888,
+      "allowed_arcs": 888,
+      "qubits": 2812,
+      "planar_undirected": true,
+      "source_out_degree": 26,
+      "sink_in_degree": 25,
+      "couplings": 5518,
+      "qubo_compile_sec": 0.04952553999464726,
+      "source": 10,
+      "sink": 0,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 691,
+        "interdicted_edges": [
+          [
+            10,
+            125
+          ],
+          [
+            10,
+            129
+          ],
+          [
+            42,
+            14
+          ],
+          [
+            68,
+            14
+          ],
+          [
+            104,
+            0
+          ],
+          [
+            135,
+            8
+          ]
+        ],
+        "lower_bound": 691.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.05134415626525879,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.03548693656921387,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 48969.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.05134415626525879,
+            "lower_bound": 691.0,
+            "milp_incumbent_objective": 691.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.00032901763916015625,
+            "interdicted_edges": [],
+            "flow": 1172
+          },
+          {
+            "solver_time_sec": 0.023793935775756836,
+            "interdicted_edges": [],
+            "flow": 1172
+          },
+          {
+            "solver_time_sec": 0.04957103729248047,
+            "interdicted_edges": [
+              [
+                10,
+                125
+              ],
+              [
+                10,
+                129
+              ],
+              [
+                42,
+                14
+              ],
+              [
+                68,
+                14
+              ],
+              [
+                104,
+                0
+              ],
+              [
+                135,
+                8
+              ]
+            ],
+            "flow": 691
+          },
+          {
+            "solver_time_sec": 0.05134415626525879,
+            "interdicted_edges": [
+              [
+                10,
+                125
+              ],
+              [
+                10,
+                129
+              ],
+              [
+                42,
+                14
+              ],
+              [
+                68,
+                14
+              ],
+              [
+                104,
+                0
+              ],
+              [
+                135,
+                8
+              ]
+            ],
+            "flow": 691
+          }
+        ],
+        "runtime_sec": 0.07075179400271736,
+        "audit_time_sec": 0.014394320998690091,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": false,
+        "terminal_incident_count": 3
+      },
+      "benders": {
+        "flow": 691,
+        "interdicted_edges": [
+          [
+            10,
+            125
+          ],
+          [
+            10,
+            129
+          ],
+          [
+            10,
+            146
+          ],
+          [
+            42,
+            14
+          ],
+          [
+            104,
+            0
+          ],
+          [
+            135,
+            8
+          ]
+        ],
+        "lower_bound": 691.0,
+        "status": "optimal",
+        "iterations": 13,
+        "cut_count": 13,
+        "runtime_sec": 0.5142588490052731,
+        "master_time_sec": 0.43723737899563275,
+        "node_count": 270.0,
+        "subproblem_time_sec": 0.05982759599282872,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 595.0,
+            "flow": 1122,
+            "best_flow": 1122,
+            "time_sec": 0.014044386000023223,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 626.0,
+            "flow": 1040,
+            "best_flow": 1040,
+            "time_sec": 0.024849891000485513,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 651.0,
+            "flow": 999,
+            "best_flow": 999,
+            "time_sec": 0.041316080998512916,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 665.0,
+            "flow": 1091,
+            "best_flow": 999,
+            "time_sec": 0.06442614200204844,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 5,
+            "lower_bound": 668.0,
+            "flow": 1004,
+            "best_flow": 999,
+            "time_sec": 0.10466748800536152,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 6,
+            "lower_bound": 669.0,
+            "flow": 909,
+            "best_flow": 909,
+            "time_sec": 0.14337135100504383,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 7,
+            "lower_bound": 671.0,
+            "flow": 1082,
+            "best_flow": 909,
+            "time_sec": 0.1753437709994614,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 8,
+            "lower_bound": 675.0,
+            "flow": 1085,
+            "best_flow": 909,
+            "time_sec": 0.21911938600533176,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 9,
+            "lower_bound": 679.0,
+            "flow": 828,
+            "best_flow": 828,
+            "time_sec": 0.2474671509990003,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 10,
+            "lower_bound": 681.0,
+            "flow": 1086,
+            "best_flow": 828,
+            "time_sec": 0.27621142999851145,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 11,
+            "lower_bound": 690.0,
+            "flow": 979,
+            "best_flow": 828,
+            "time_sec": 0.3577329190011369,
+            "master_status": 2,
+            "master_nodes": 105.0
+          },
+          {
+            "iteration": 12,
+            "lower_bound": 691.0,
+            "flow": 844,
+            "best_flow": 828,
+            "time_sec": 0.4259771860015462,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 13,
+            "lower_bound": 691.0,
+            "flow": 691,
+            "best_flow": 691,
+            "time_sec": 0.5137650110045797,
+            "master_status": 2,
+            "master_nodes": 154.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": false,
+        "terminal_incident_count": 4,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    },
+    {
+      "name": "70_0.1.erdosflow",
+      "family": "erdos",
+      "B": 3,
+      "file": "../70_0.1.erdosflow",
+      "sha256": "7a8df2629363299cb88096306231a77c5d0eef7826d04ae76f96e33308f97ab1",
+      "nodes": 70,
+      "arcs": 456,
+      "allowed_arcs": 456,
+      "qubits": 1436,
+      "planar_undirected": false,
+      "source_out_degree": 12,
+      "sink_in_degree": 11,
+      "couplings": 2849,
+      "qubo_compile_sec": 0.025888752003083937,
+      "source": 24,
+      "sink": 57,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 404,
+        "interdicted_edges": [
+          [
+            24,
+            3
+          ],
+          [
+            24,
+            16
+          ],
+          [
+            24,
+            62
+          ]
+        ],
+        "lower_bound": 404.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.020526885986328125,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.015602827072143555,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 24405.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.020526885986328125,
+            "lower_bound": 404.0,
+            "milp_incumbent_objective": 404.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.00028896331787109375,
+            "interdicted_edges": [],
+            "flow": 670
+          },
+          {
+            "solver_time_sec": 0.009696006774902344,
+            "interdicted_edges": [],
+            "flow": 670
+          },
+          {
+            "solver_time_sec": 0.01914501190185547,
+            "interdicted_edges": [
+              [
+                24,
+                3
+              ],
+              [
+                24,
+                16
+              ],
+              [
+                24,
+                62
+              ]
+            ],
+            "flow": 404
+          },
+          {
+            "solver_time_sec": 0.020526885986328125,
+            "interdicted_edges": [
+              [
+                24,
+                3
+              ],
+              [
+                24,
+                16
+              ],
+              [
+                24,
+                62
+              ]
+            ],
+            "flow": 404
+          }
+        ],
+        "runtime_sec": 0.03350689000217244,
+        "audit_time_sec": 0.0045869649984524585,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 3
+      },
+      "benders": {
+        "flow": 404,
+        "interdicted_edges": [
+          [
+            24,
+            3
+          ],
+          [
+            24,
+            16
+          ],
+          [
+            24,
+            62
+          ]
+        ],
+        "lower_bound": 404.0,
+        "status": "optimal",
+        "iterations": 6,
+        "cut_count": 6,
+        "runtime_sec": 0.027627786999801174,
+        "master_time_sec": 0.012981546999071725,
+        "node_count": 5.0,
+        "subproblem_time_sec": 0.010813633001816925,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 381.0,
+            "flow": 627,
+            "best_flow": 627,
+            "time_sec": 0.005142269001225941,
+            "master_status": 2,
+            "master_nodes": 0.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 394.0,
+            "flow": 489,
+            "best_flow": 489,
+            "time_sec": 0.009264338004868478,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 404.0,
+            "flow": 490,
+            "best_flow": 489,
+            "time_sec": 0.013953640002000611,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 404.0,
+            "flow": 490,
+            "best_flow": 489,
+            "time_sec": 0.018154258003050927,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 5,
+            "lower_bound": 404.0,
+            "flow": 585,
+            "best_flow": 489,
+            "time_sec": 0.022668659999908414,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 6,
+            "lower_bound": 404.0,
+            "flow": 404,
+            "best_flow": 404,
+            "time_sec": 0.027324201000737958,
+            "master_status": 2,
+            "master_nodes": 1.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 3,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    },
+    {
+      "name": "70_0.1.erdosflow",
+      "family": "erdos",
+      "B": 6,
+      "file": "../70_0.1.erdosflow",
+      "sha256": "7a8df2629363299cb88096306231a77c5d0eef7826d04ae76f96e33308f97ab1",
+      "nodes": 70,
+      "arcs": 456,
+      "allowed_arcs": 456,
+      "qubits": 1436,
+      "planar_undirected": false,
+      "source_out_degree": 12,
+      "sink_in_degree": 11,
+      "couplings": 2849,
+      "qubo_compile_sec": 0.028206820999912452,
+      "source": 24,
+      "sink": 57,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 188,
+        "interdicted_edges": [
+          [
+            24,
+            3
+          ],
+          [
+            24,
+            10
+          ],
+          [
+            24,
+            16
+          ],
+          [
+            24,
+            20
+          ],
+          [
+            24,
+            37
+          ],
+          [
+            24,
+            62
+          ]
+        ],
+        "lower_bound": 188.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.026961088180541992,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.02115607261657715,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 24405.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.026961088180541992,
+            "lower_bound": 188.0,
+            "milp_incumbent_objective": 188.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.0004210472106933594,
+            "interdicted_edges": [],
+            "flow": 670
+          },
+          {
+            "solver_time_sec": 0.014946937561035156,
+            "interdicted_edges": [],
+            "flow": 670
+          },
+          {
+            "solver_time_sec": 0.025619983673095703,
+            "interdicted_edges": [
+              [
+                24,
+                3
+              ],
+              [
+                24,
+                10
+              ],
+              [
+                24,
+                16
+              ],
+              [
+                24,
+                20
+              ],
+              [
+                24,
+                37
+              ],
+              [
+                24,
+                62
+              ]
+            ],
+            "flow": 188
+          },
+          {
+            "solver_time_sec": 0.026961088180541992,
+            "interdicted_edges": [
+              [
+                24,
+                3
+              ],
+              [
+                24,
+                10
+              ],
+              [
+                24,
+                16
+              ],
+              [
+                24,
+                20
+              ],
+              [
+                24,
+                37
+              ],
+              [
+                24,
+                62
+              ]
+            ],
+            "flow": 188
+          }
+        ],
+        "runtime_sec": 0.04348830199887743,
+        "audit_time_sec": 0.004554399994958658,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 6
+      },
+      "benders": {
+        "flow": 188,
+        "interdicted_edges": [
+          [
+            24,
+            3
+          ],
+          [
+            24,
+            10
+          ],
+          [
+            24,
+            16
+          ],
+          [
+            24,
+            20
+          ],
+          [
+            24,
+            37
+          ],
+          [
+            24,
+            62
+          ]
+        ],
+        "lower_bound": 188.0,
+        "status": "optimal",
+        "iterations": 6,
+        "cut_count": 6,
+        "runtime_sec": 0.11145260000193957,
+        "master_time_sec": 0.026154191000387073,
+        "node_count": 6.0,
+        "subproblem_time_sec": 0.08043325199832907,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 105.0,
+            "flow": 532,
+            "best_flow": 532,
+            "time_sec": 0.00692732899915427,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 180.0,
+            "flow": 426,
+            "best_flow": 426,
+            "time_sec": 0.07957755499955965,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 188.0,
+            "flow": 261,
+            "best_flow": 261,
+            "time_sec": 0.08837106000282802,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 188.0,
+            "flow": 356,
+            "best_flow": 261,
+            "time_sec": 0.09555117000127211,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 5,
+            "lower_bound": 188.0,
+            "flow": 261,
+            "best_flow": 261,
+            "time_sec": 0.1026662549993489,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 6,
+            "lower_bound": 188.0,
+            "flow": 188,
+            "best_flow": 188,
+            "time_sec": 0.11124826600280358,
+            "master_status": 2,
+            "master_nodes": 1.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 6,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    },
+    {
+      "name": "90_0.1.erdosflow",
+      "family": "erdos",
+      "B": 3,
+      "file": "../90_0.1.erdosflow",
+      "sha256": "6fd767d947352d8710d839a5df7e2e357d6cdf6410eda6386b431aa2df855ad6",
+      "nodes": 90,
+      "arcs": 760,
+      "allowed_arcs": 760,
+      "qubits": 2368,
+      "planar_undirected": false,
+      "source_out_degree": 17,
+      "sink_in_degree": 15,
+      "couplings": 4781,
+      "qubo_compile_sec": 0.05282489300589077,
+      "source": 28,
+      "sink": 37,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 555,
+        "interdicted_edges": [
+          [
+            28,
+            14
+          ],
+          [
+            28,
+            68
+          ],
+          [
+            28,
+            75
+          ]
+        ],
+        "lower_bound": 555.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.0309598445892334,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.023929834365844727,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 41483.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.0309598445892334,
+            "lower_bound": 555.0,
+            "milp_incumbent_objective": 555.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.0003039836883544922,
+            "interdicted_edges": [],
+            "flow": 834
+          },
+          {
+            "solver_time_sec": 0.013948917388916016,
+            "interdicted_edges": [],
+            "flow": 834
+          },
+          {
+            "solver_time_sec": 0.02981090545654297,
+            "interdicted_edges": [
+              [
+                28,
+                14
+              ],
+              [
+                28,
+                68
+              ],
+              [
+                28,
+                75
+              ]
+            ],
+            "flow": 555
+          },
+          {
+            "solver_time_sec": 0.0309598445892334,
+            "interdicted_edges": [
+              [
+                28,
+                14
+              ],
+              [
+                28,
+                68
+              ],
+              [
+                28,
+                75
+              ]
+            ],
+            "flow": 555
+          }
+        ],
+        "runtime_sec": 0.04671377799968468,
+        "audit_time_sec": 0.0065986199988401495,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 3
+      },
+      "benders": {
+        "flow": 555,
+        "interdicted_edges": [
+          [
+            28,
+            14
+          ],
+          [
+            28,
+            68
+          ],
+          [
+            28,
+            75
+          ]
+        ],
+        "lower_bound": 555.0,
+        "status": "optimal",
+        "iterations": 6,
+        "cut_count": 6,
+        "runtime_sec": 0.035718721999728587,
+        "master_time_sec": 0.01357522800390143,
+        "node_count": 6.0,
+        "subproblem_time_sec": 0.016678658001183067,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 539.0,
+            "flow": 636,
+            "best_flow": 636,
+            "time_sec": 0.00886681299743941,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 542.0,
+            "flow": 636,
+            "best_flow": 636,
+            "time_sec": 0.013877532997867092,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 549.0,
+            "flow": 636,
+            "best_flow": 636,
+            "time_sec": 0.018431600998155773,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 554.0,
+            "flow": 735,
+            "best_flow": 636,
+            "time_sec": 0.024445707000268158,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 5,
+            "lower_bound": 554.0,
+            "flow": 735,
+            "best_flow": 636,
+            "time_sec": 0.030705485994985793,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 6,
+            "lower_bound": 555.0,
+            "flow": 555,
+            "best_flow": 555,
+            "time_sec": 0.035579805000452325,
+            "master_status": 2,
+            "master_nodes": 1.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 3,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    },
+    {
+      "name": "90_0.1.erdosflow",
+      "family": "erdos",
+      "B": 6,
+      "file": "../90_0.1.erdosflow",
+      "sha256": "6fd767d947352d8710d839a5df7e2e357d6cdf6410eda6386b431aa2df855ad6",
+      "nodes": 90,
+      "arcs": 760,
+      "allowed_arcs": 760,
+      "qubits": 2368,
+      "planar_undirected": false,
+      "source_out_degree": 17,
+      "sink_in_degree": 15,
+      "couplings": 4781,
+      "qubo_compile_sec": 0.042975097996531986,
+      "source": 28,
+      "sink": 37,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 341,
+        "interdicted_edges": [
+          [
+            28,
+            8
+          ],
+          [
+            28,
+            13
+          ],
+          [
+            28,
+            14
+          ],
+          [
+            28,
+            68
+          ],
+          [
+            28,
+            75
+          ],
+          [
+            28,
+            83
+          ]
+        ],
+        "lower_bound": 341.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.034898996353149414,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.02702498435974121,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 41483.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.034898996353149414,
+            "lower_bound": 341.0,
+            "milp_incumbent_objective": 341.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.0002970695495605469,
+            "interdicted_edges": [],
+            "flow": 834
+          },
+          {
+            "solver_time_sec": 0.015232086181640625,
+            "interdicted_edges": [],
+            "flow": 834
+          },
+          {
+            "solver_time_sec": 0.033709049224853516,
+            "interdicted_edges": [
+              [
+                28,
+                8
+              ],
+              [
+                28,
+                13
+              ],
+              [
+                28,
+                14
+              ],
+              [
+                28,
+                68
+              ],
+              [
+                28,
+                75
+              ],
+              [
+                28,
+                83
+              ]
+            ],
+            "flow": 341
+          },
+          {
+            "solver_time_sec": 0.034898996353149414,
+            "interdicted_edges": [
+              [
+                28,
+                8
+              ],
+              [
+                28,
+                13
+              ],
+              [
+                28,
+                14
+              ],
+              [
+                28,
+                68
+              ],
+              [
+                28,
+                75
+              ],
+              [
+                28,
+                83
+              ]
+            ],
+            "flow": 341
+          }
+        ],
+        "runtime_sec": 0.06073067399847787,
+        "audit_time_sec": 0.008473613997921348,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 6
+      },
+      "benders": {
+        "flow": 341,
+        "interdicted_edges": [
+          [
+            28,
+            8
+          ],
+          [
+            28,
+            13
+          ],
+          [
+            28,
+            14
+          ],
+          [
+            28,
+            68
+          ],
+          [
+            28,
+            75
+          ],
+          [
+            28,
+            83
+          ]
+        ],
+        "lower_bound": 341.0,
+        "status": "optimal",
+        "iterations": 9,
+        "cut_count": 9,
+        "runtime_sec": 0.12659251500008395,
+        "master_time_sec": 0.09055871399323223,
+        "node_count": 9.0,
+        "subproblem_time_sec": 0.026781107997521758,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 264.0,
+            "flow": 636,
+            "best_flow": 636,
+            "time_sec": 0.009399990005476866,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 306.0,
+            "flow": 474,
+            "best_flow": 474,
+            "time_sec": 0.015218438005831558,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 324.0,
+            "flow": 596,
+            "best_flow": 474,
+            "time_sec": 0.022443456000473816,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 324.0,
+            "flow": 586,
+            "best_flow": 474,
+            "time_sec": 0.029346138006076217,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 5,
+            "lower_bound": 336.0,
+            "flow": 618,
+            "best_flow": 474,
+            "time_sec": 0.04036780700698728,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 6,
+            "lower_bound": 340.0,
+            "flow": 487,
+            "best_flow": 474,
+            "time_sec": 0.055272782999963965,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 7,
+            "lower_bound": 341.0,
+            "flow": 422,
+            "best_flow": 422,
+            "time_sec": 0.0826453460031189,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 8,
+            "lower_bound": 341.0,
+            "flow": 406,
+            "best_flow": 406,
+            "time_sec": 0.10886789000505814,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 9,
+            "lower_bound": 341.0,
+            "flow": 341,
+            "best_flow": 341,
+            "time_sec": 0.1263386300051934,
+            "master_status": 2,
+            "master_nodes": 1.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 6,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    },
+    {
+      "name": "75_6.2dnnflow",
+      "family": "knn",
+      "B": 3,
+      "file": "../75_6.2dnnflow",
+      "sha256": "a2fa6742872b61087526c4d8594cac198ed6fda7cf54369365fa68cc23228c55",
+      "nodes": 75,
+      "arcs": 590,
+      "allowed_arcs": 590,
+      "qubits": 1843,
+      "planar_undirected": false,
+      "source_out_degree": 13,
+      "sink_in_degree": 11,
+      "couplings": 3591,
+      "qubo_compile_sec": 0.029610094999952707,
+      "source": 2,
+      "sink": 11,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 312,
+        "interdicted_edges": [
+          [
+            37,
+            40
+          ],
+          [
+            59,
+            72
+          ],
+          [
+            67,
+            53
+          ]
+        ],
+        "lower_bound": 312.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.030403852462768555,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.02436995506286621,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 28471.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.030403852462768555,
+            "lower_bound": 312.0,
+            "milp_incumbent_objective": 312.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.0002689361572265625,
+            "interdicted_edges": [],
+            "flow": 588
+          },
+          {
+            "solver_time_sec": 0.01820087432861328,
+            "interdicted_edges": [],
+            "flow": 588
+          },
+          {
+            "solver_time_sec": 0.02928781509399414,
+            "interdicted_edges": [
+              [
+                37,
+                40
+              ],
+              [
+                59,
+                72
+              ],
+              [
+                67,
+                53
+              ]
+            ],
+            "flow": 312
+          },
+          {
+            "solver_time_sec": 0.030403852462768555,
+            "interdicted_edges": [
+              [
+                37,
+                40
+              ],
+              [
+                59,
+                72
+              ],
+              [
+                67,
+                53
+              ]
+            ],
+            "flow": 312
+          }
+        ],
+        "runtime_sec": 0.04308595699694706,
+        "audit_time_sec": 0.009577760996762663,
+        "relative_gap": 0.0,
+        "any_terminal_incident": false,
+        "all_terminal_incident": false,
+        "terminal_incident_count": 0
+      },
+      "benders": {
+        "flow": 312,
+        "interdicted_edges": [
+          [
+            37,
+            40
+          ],
+          [
+            59,
+            72
+          ],
+          [
+            67,
+            53
+          ]
+        ],
+        "lower_bound": 312.0,
+        "status": "optimal",
+        "iterations": 4,
+        "cut_count": 4,
+        "runtime_sec": 0.026156714993703645,
+        "master_time_sec": 0.0070658440090483055,
+        "node_count": 3.0,
+        "subproblem_time_sec": 0.014953116995457094,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 300.0,
+            "flow": 588,
+            "best_flow": 588,
+            "time_sec": 0.008739869997953065,
+            "master_status": 2,
+            "master_nodes": 0.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 305.0,
+            "flow": 584,
+            "best_flow": 584,
+            "time_sec": 0.013909682995290495,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 311.0,
+            "flow": 400,
+            "best_flow": 400,
+            "time_sec": 0.019601904998125974,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 312.0,
+            "flow": 312,
+            "best_flow": 312,
+            "time_sec": 0.025964850996388122,
+            "master_status": 2,
+            "master_nodes": 1.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": false,
+        "all_terminal_incident": false,
+        "terminal_incident_count": 0,
+        "relative_gap": 0.0
+      },
+      "classification": "not_hard_for_both_measured_solvers"
+    },
+    {
+      "name": "75_6.2dnnflow",
+      "family": "knn",
+      "B": 6,
+      "file": "../75_6.2dnnflow",
+      "sha256": "a2fa6742872b61087526c4d8594cac198ed6fda7cf54369365fa68cc23228c55",
+      "nodes": 75,
+      "arcs": 590,
+      "allowed_arcs": 590,
+      "qubits": 1843,
+      "planar_undirected": false,
+      "source_out_degree": 13,
+      "sink_in_degree": 11,
+      "couplings": 3591,
+      "qubo_compile_sec": 0.02917633800097974,
+      "source": 2,
+      "sink": 11,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 145,
+        "interdicted_edges": [
+          [
+            1,
+            11
+          ],
+          [
+            25,
+            11
+          ],
+          [
+            33,
+            11
+          ],
+          [
+            34,
+            11
+          ],
+          [
+            56,
+            11
+          ],
+          [
+            65,
+            11
+          ]
+        ],
+        "lower_bound": 145.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.03410005569458008,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.023473024368286133,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 28471.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.03410005569458008,
+            "lower_bound": 145.0,
+            "milp_incumbent_objective": 145.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.00032401084899902344,
+            "interdicted_edges": [],
+            "flow": 588
+          },
+          {
+            "solver_time_sec": 0.018218040466308594,
+            "interdicted_edges": [],
+            "flow": 588
+          },
+          {
+            "solver_time_sec": 0.03249192237854004,
+            "interdicted_edges": [
+              [
+                1,
+                11
+              ],
+              [
+                25,
+                11
+              ],
+              [
+                33,
+                11
+              ],
+              [
+                34,
+                11
+              ],
+              [
+                56,
+                11
+              ],
+              [
+                65,
+                11
+              ]
+            ],
+            "flow": 145
+          },
+          {
+            "solver_time_sec": 0.03410005569458008,
+            "interdicted_edges": [
+              [
+                1,
+                11
+              ],
+              [
+                25,
+                11
+              ],
+              [
+                33,
+                11
+              ],
+              [
+                34,
+                11
+              ],
+              [
+                56,
+                11
+              ],
+              [
+                65,
+                11
+              ]
+            ],
+            "flow": 145
+          }
+        ],
+        "runtime_sec": 0.046942487999331206,
+        "audit_time_sec": 0.009985519005567767,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 6
+      },
+      "benders": {
+        "flow": 145,
+        "interdicted_edges": [
+          [
+            1,
+            11
+          ],
+          [
+            25,
+            11
+          ],
+          [
+            33,
+            11
+          ],
+          [
+            34,
+            11
+          ],
+          [
+            56,
+            11
+          ],
+          [
+            65,
+            11
+          ]
+        ],
+        "lower_bound": 145.0,
+        "status": "optimal",
+        "iterations": 16,
+        "cut_count": 16,
+        "runtime_sec": 1.5374981630011462,
+        "master_time_sec": 1.4723977650064626,
+        "node_count": 5769.0,
+        "subproblem_time_sec": 0.050340805981250014,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 17.0,
+            "flow": 494,
+            "best_flow": 494,
+            "time_sec": 0.008936940001149196,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 40.0,
+            "flow": 406,
+            "best_flow": 406,
+            "time_sec": 0.01572993100126041,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 63.0,
+            "flow": 400,
+            "best_flow": 400,
+            "time_sec": 0.028073622997908387,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 71.0,
+            "flow": 437,
+            "best_flow": 400,
+            "time_sec": 0.0468925270033651,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 5,
+            "lower_bound": 80.0,
+            "flow": 406,
+            "best_flow": 400,
+            "time_sec": 0.06717338900489267,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 6,
+            "lower_bound": 88.0,
+            "flow": 312,
+            "best_flow": 312,
+            "time_sec": 0.10290808100398863,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 7,
+            "lower_bound": 89.0,
+            "flow": 494,
+            "best_flow": 312,
+            "time_sec": 0.15627429600135656,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 8,
+            "lower_bound": 94.0,
+            "flow": 337,
+            "best_flow": 312,
+            "time_sec": 0.20438088700029766,
+            "master_status": 2,
+            "master_nodes": 123.0
+          },
+          {
+            "iteration": 9,
+            "lower_bound": 100.0,
+            "flow": 454,
+            "best_flow": 312,
+            "time_sec": 0.24687391400220804,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 10,
+            "lower_bound": 115.0,
+            "flow": 425,
+            "best_flow": 312,
+            "time_sec": 0.3277330319979228,
+            "master_status": 2,
+            "master_nodes": 300.0
+          },
+          {
+            "iteration": 11,
+            "lower_bound": 118.0,
+            "flow": 337,
+            "best_flow": 312,
+            "time_sec": 0.420437139000569,
+            "master_status": 2,
+            "master_nodes": 211.0
+          },
+          {
+            "iteration": 12,
+            "lower_bound": 130.0,
+            "flow": 401,
+            "best_flow": 312,
+            "time_sec": 0.5430206980017829,
+            "master_status": 2,
+            "master_nodes": 646.0
+          },
+          {
+            "iteration": 13,
+            "lower_bound": 137.0,
+            "flow": 443,
+            "best_flow": 312,
+            "time_sec": 0.7785634140018374,
+            "master_status": 2,
+            "master_nodes": 1039.0
+          },
+          {
+            "iteration": 14,
+            "lower_bound": 138.0,
+            "flow": 431,
+            "best_flow": 312,
+            "time_sec": 1.0273466240032576,
+            "master_status": 2,
+            "master_nodes": 897.0
+          },
+          {
+            "iteration": 15,
+            "lower_bound": 142.0,
+            "flow": 433,
+            "best_flow": 312,
+            "time_sec": 1.2059165500031668,
+            "master_status": 2,
+            "master_nodes": 1267.0
+          },
+          {
+            "iteration": 16,
+            "lower_bound": 145.0,
+            "flow": 145,
+            "best_flow": 145,
+            "time_sec": 1.5371155500033638,
+            "master_status": 2,
+            "master_nodes": 1278.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 6,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    },
+    {
+      "name": "100_6.2dnnflow",
+      "family": "knn",
+      "B": 3,
+      "file": "../100_6.2dnnflow",
+      "sha256": "e3795f7b55f00d000d4447ffc0aeae95fbc126a5d269c53eb72d8b43b51304cb",
+      "nodes": 100,
+      "arcs": 766,
+      "allowed_arcs": 766,
+      "qubits": 2396,
+      "planar_undirected": false,
+      "source_out_degree": 12,
+      "sink_in_degree": 11,
+      "couplings": 4691,
+      "qubo_compile_sec": 0.04305312600627076,
+      "source": 25,
+      "sink": 34,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 342,
+        "interdicted_edges": [
+          [
+            25,
+            1
+          ],
+          [
+            25,
+            56
+          ],
+          [
+            25,
+            65
+          ]
+        ],
+        "lower_bound": 342.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.04629087448120117,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.03368186950683594,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 38293.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.04629087448120117,
+            "lower_bound": 342.0,
+            "milp_incumbent_objective": 342.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.00030684471130371094,
+            "interdicted_edges": [],
+            "flow": 579
+          },
+          {
+            "solver_time_sec": 0.025758028030395508,
+            "interdicted_edges": [],
+            "flow": 579
+          },
+          {
+            "solver_time_sec": 0.04277992248535156,
+            "interdicted_edges": [
+              [
+                1,
+                34
+              ]
+            ],
+            "flow": 546
+          },
+          {
+            "solver_time_sec": 0.04334902763366699,
+            "interdicted_edges": [
+              [
+                25,
+                1
+              ],
+              [
+                25,
+                65
+              ]
+            ],
+            "flow": 414
+          },
+          {
+            "solver_time_sec": 0.043998003005981445,
+            "interdicted_edges": [
+              [
+                25,
+                1
+              ],
+              [
+                25,
+                56
+              ],
+              [
+                25,
+                65
+              ]
+            ],
+            "flow": 342
+          },
+          {
+            "solver_time_sec": 0.04629087448120117,
+            "interdicted_edges": [
+              [
+                25,
+                1
+              ],
+              [
+                25,
+                56
+              ],
+              [
+                25,
+                65
+              ]
+            ],
+            "flow": 342
+          }
+        ],
+        "runtime_sec": 0.06190368399984436,
+        "audit_time_sec": 0.009580703001120128,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 3
+      },
+      "benders": {
+        "flow": 342,
+        "interdicted_edges": [
+          [
+            25,
+            1
+          ],
+          [
+            25,
+            56
+          ],
+          [
+            25,
+            65
+          ]
+        ],
+        "lower_bound": 342.0,
+        "status": "optimal",
+        "iterations": 9,
+        "cut_count": 9,
+        "runtime_sec": 0.08433955999498721,
+        "master_time_sec": 0.04999541101278737,
+        "node_count": 9.0,
+        "subproblem_time_sec": 0.024830364985973574,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 297.0,
+            "flow": 453,
+            "best_flow": 453,
+            "time_sec": 0.010298413995769806,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 307.0,
+            "flow": 547,
+            "best_flow": 453,
+            "time_sec": 0.015216140993288718,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 321.0,
+            "flow": 414,
+            "best_flow": 414,
+            "time_sec": 0.0220334269979503,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 322.0,
+            "flow": 414,
+            "best_flow": 414,
+            "time_sec": 0.027948933995503467,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 5,
+            "lower_bound": 333.0,
+            "flow": 464,
+            "best_flow": 414,
+            "time_sec": 0.036891067000397015,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 6,
+            "lower_bound": 333.0,
+            "flow": 465,
+            "best_flow": 414,
+            "time_sec": 0.046610199999122415,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 7,
+            "lower_bound": 342.0,
+            "flow": 425,
+            "best_flow": 414,
+            "time_sec": 0.05775215899484465,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 8,
+            "lower_bound": 342.0,
+            "flow": 424,
+            "best_flow": 414,
+            "time_sec": 0.06946062899805838,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 9,
+            "lower_bound": 342.0,
+            "flow": 342,
+            "best_flow": 342,
+            "time_sec": 0.08414528199500637,
+            "master_status": 2,
+            "master_nodes": 1.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 3,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    },
+    {
+      "name": "100_6.2dnnflow",
+      "family": "knn",
+      "B": 6,
+      "file": "../100_6.2dnnflow",
+      "sha256": "e3795f7b55f00d000d4447ffc0aeae95fbc126a5d269c53eb72d8b43b51304cb",
+      "nodes": 100,
+      "arcs": 766,
+      "allowed_arcs": 766,
+      "qubits": 2396,
+      "planar_undirected": false,
+      "source_out_degree": 12,
+      "sink_in_degree": 11,
+      "couplings": 4691,
+      "qubo_compile_sec": 0.0429394719976699,
+      "source": 25,
+      "sink": 34,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 126,
+        "interdicted_edges": [
+          [
+            1,
+            34
+          ],
+          [
+            21,
+            34
+          ],
+          [
+            42,
+            34
+          ],
+          [
+            79,
+            34
+          ],
+          [
+            92,
+            34
+          ],
+          [
+            95,
+            34
+          ]
+        ],
+        "lower_bound": 126.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.041606903076171875,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.033711910247802734,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 38293.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.041606903076171875,
+            "lower_bound": 126.0,
+            "milp_incumbent_objective": 126.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.0003159046173095703,
+            "interdicted_edges": [],
+            "flow": 579
+          },
+          {
+            "solver_time_sec": 0.026182889938354492,
+            "interdicted_edges": [],
+            "flow": 579
+          },
+          {
+            "solver_time_sec": 0.04030585289001465,
+            "interdicted_edges": [
+              [
+                1,
+                34
+              ],
+              [
+                21,
+                34
+              ],
+              [
+                42,
+                34
+              ],
+              [
+                79,
+                34
+              ],
+              [
+                92,
+                34
+              ],
+              [
+                95,
+                34
+              ]
+            ],
+            "flow": 126
+          },
+          {
+            "solver_time_sec": 0.041606903076171875,
+            "interdicted_edges": [
+              [
+                1,
+                34
+              ],
+              [
+                21,
+                34
+              ],
+              [
+                42,
+                34
+              ],
+              [
+                79,
+                34
+              ],
+              [
+                92,
+                34
+              ],
+              [
+                95,
+                34
+              ]
+            ],
+            "flow": 126
+          }
+        ],
+        "runtime_sec": 0.05759807199501665,
+        "audit_time_sec": 0.010980015998939052,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 6
+      },
+      "benders": {
+        "flow": 126,
+        "interdicted_edges": [
+          [
+            1,
+            34
+          ],
+          [
+            21,
+            34
+          ],
+          [
+            42,
+            34
+          ],
+          [
+            79,
+            34
+          ],
+          [
+            92,
+            34
+          ],
+          [
+            95,
+            34
+          ]
+        ],
+        "lower_bound": 126.0,
+        "status": "optimal",
+        "iterations": 4,
+        "cut_count": 4,
+        "runtime_sec": 0.04517374299757648,
+        "master_time_sec": 0.02560127699689474,
+        "node_count": 4.0,
+        "subproblem_time_sec": 0.014547039994795341,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 39.0,
+            "flow": 362,
+            "best_flow": 362,
+            "time_sec": 0.01058302899764385,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 92.0,
+            "flow": 363,
+            "best_flow": 362,
+            "time_sec": 0.01775480100332061,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 110.0,
+            "flow": 285,
+            "best_flow": 285,
+            "time_sec": 0.029187220003223047,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 126.0,
+            "flow": 126,
+            "best_flow": 126,
+            "time_sec": 0.0449075209980947,
+            "master_status": 2,
+            "master_nodes": 1.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 6,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    },
+    {
+      "name": "100_7.2dnnflow",
+      "family": "knn",
+      "B": 3,
+      "file": "../100_7.2dnnflow",
+      "sha256": "185d6d6d70fef0961b9c379439f531c1538883783534d1116e961b309b62d838",
+      "nodes": 100,
+      "arcs": 895,
+      "allowed_arcs": 895,
+      "qubits": 2783,
+      "planar_undirected": false,
+      "source_out_degree": 15,
+      "sink_in_degree": 13,
+      "couplings": 5486,
+      "qubo_compile_sec": 0.05524009099463001,
+      "source": 28,
+      "sink": 90,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 479,
+        "interdicted_edges": [
+          [
+            10,
+            90
+          ],
+          [
+            31,
+            90
+          ],
+          [
+            32,
+            90
+          ]
+        ],
+        "lower_bound": 479.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.06357097625732422,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.045719146728515625,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 45816.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.06357097625732422,
+            "lower_bound": 479.0,
+            "milp_incumbent_objective": 479.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.00033593177795410156,
+            "interdicted_edges": [],
+            "flow": 743
+          },
+          {
+            "solver_time_sec": 0.0354459285736084,
+            "interdicted_edges": [],
+            "flow": 743
+          },
+          {
+            "solver_time_sec": 0.05792593955993652,
+            "interdicted_edges": [
+              [
+                31,
+                90
+              ]
+            ],
+            "flow": 645
+          },
+          {
+            "solver_time_sec": 0.060868024826049805,
+            "interdicted_edges": [
+              [
+                10,
+                90
+              ],
+              [
+                31,
+                90
+              ],
+              [
+                32,
+                90
+              ]
+            ],
+            "flow": 479
+          },
+          {
+            "solver_time_sec": 0.06357097625732422,
+            "interdicted_edges": [
+              [
+                10,
+                90
+              ],
+              [
+                31,
+                90
+              ],
+              [
+                32,
+                90
+              ]
+            ],
+            "flow": 479
+          }
+        ],
+        "runtime_sec": 0.08532014799857279,
+        "audit_time_sec": 0.017986688995733857,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 3
+      },
+      "benders": {
+        "flow": 479,
+        "interdicted_edges": [
+          [
+            10,
+            90
+          ],
+          [
+            31,
+            90
+          ],
+          [
+            32,
+            90
+          ]
+        ],
+        "lower_bound": 479.0,
+        "status": "optimal",
+        "iterations": 10,
+        "cut_count": 10,
+        "runtime_sec": 0.28803886500099907,
+        "master_time_sec": 0.15309028499177657,
+        "node_count": 10.0,
+        "subproblem_time_sec": 0.12103038499481045,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 451.0,
+            "flow": 645,
+            "best_flow": 645,
+            "time_sec": 0.012664373003644869,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 461.0,
+            "flow": 567,
+            "best_flow": 567,
+            "time_sec": 0.0933123560025706,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 463.0,
+            "flow": 605,
+            "best_flow": 567,
+            "time_sec": 0.1034161120041972,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 463.0,
+            "flow": 702,
+            "best_flow": 567,
+            "time_sec": 0.11559859700355446,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 5,
+            "lower_bound": 475.0,
+            "flow": 623,
+            "best_flow": 567,
+            "time_sec": 0.1318762520022574,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 6,
+            "lower_bound": 477.0,
+            "flow": 611,
+            "best_flow": 567,
+            "time_sec": 0.14890383400052087,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 7,
+            "lower_bound": 478.0,
+            "flow": 561,
+            "best_flow": 561,
+            "time_sec": 0.17869423500087578,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 8,
+            "lower_bound": 479.0,
+            "flow": 611,
+            "best_flow": 561,
+            "time_sec": 0.21378615299909143,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 9,
+            "lower_bound": 479.0,
+            "flow": 665,
+            "best_flow": 561,
+            "time_sec": 0.2520365660020616,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 10,
+            "lower_bound": 479.0,
+            "flow": 479,
+            "best_flow": 479,
+            "time_sec": 0.2877599990024464,
+            "master_status": 2,
+            "master_nodes": 1.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 3,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    },
+    {
+      "name": "100_7.2dnnflow",
+      "family": "knn",
+      "B": 6,
+      "file": "../100_7.2dnnflow",
+      "sha256": "185d6d6d70fef0961b9c379439f531c1538883783534d1116e961b309b62d838",
+      "nodes": 100,
+      "arcs": 895,
+      "allowed_arcs": 895,
+      "qubits": 2783,
+      "planar_undirected": false,
+      "source_out_degree": 15,
+      "sink_in_degree": 13,
+      "couplings": 5486,
+      "qubo_compile_sec": 0.04454371199972229,
+      "source": 28,
+      "sink": 90,
+      "allowed_only_interior": false,
+      "milp": {
+        "flow": 257,
+        "interdicted_edges": [
+          [
+            2,
+            90
+          ],
+          [
+            7,
+            90
+          ],
+          [
+            10,
+            90
+          ],
+          [
+            15,
+            90
+          ],
+          [
+            31,
+            90
+          ],
+          [
+            32,
+            90
+          ]
+        ],
+        "lower_bound": 257.0,
+        "status": "optimal",
+        "node_count": 1.0,
+        "solver_time_sec": 0.0658729076385498,
+        "trajectory": [
+          {
+            "solver_time_sec": 0.05372500419616699,
+            "lower_bound": 0.0,
+            "milp_incumbent_objective": 45816.0,
+            "node_count": 0.0
+          },
+          {
+            "solver_time_sec": 0.0658729076385498,
+            "lower_bound": 257.0,
+            "milp_incumbent_objective": 257.0,
+            "node_count": 1.0
+          }
+        ],
+        "incumbents": [
+          {
+            "solver_time_sec": 0.0004630088806152344,
+            "interdicted_edges": [],
+            "flow": 743
+          },
+          {
+            "solver_time_sec": 0.04352998733520508,
+            "interdicted_edges": [],
+            "flow": 743
+          },
+          {
+            "solver_time_sec": 0.06438493728637695,
+            "interdicted_edges": [
+              [
+                2,
+                90
+              ],
+              [
+                7,
+                90
+              ],
+              [
+                10,
+                90
+              ],
+              [
+                15,
+                90
+              ],
+              [
+                31,
+                90
+              ],
+              [
+                32,
+                90
+              ]
+            ],
+            "flow": 257
+          },
+          {
+            "solver_time_sec": 0.0658729076385498,
+            "interdicted_edges": [
+              [
+                2,
+                90
+              ],
+              [
+                7,
+                90
+              ],
+              [
+                10,
+                90
+              ],
+              [
+                15,
+                90
+              ],
+              [
+                31,
+                90
+              ],
+              [
+                32,
+                90
+              ]
+            ],
+            "flow": 257
+          }
+        ],
+        "runtime_sec": 0.08470438200311037,
+        "audit_time_sec": 0.013841273997968528,
+        "relative_gap": 0.0,
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 6
+      },
+      "benders": {
+        "flow": 257,
+        "interdicted_edges": [
+          [
+            2,
+            90
+          ],
+          [
+            7,
+            90
+          ],
+          [
+            10,
+            90
+          ],
+          [
+            15,
+            90
+          ],
+          [
+            31,
+            90
+          ],
+          [
+            32,
+            90
+          ]
+        ],
+        "lower_bound": 257.0,
+        "status": "optimal",
+        "iterations": 9,
+        "cut_count": 9,
+        "runtime_sec": 0.45833475600375095,
+        "master_time_sec": 0.40293233400734607,
+        "node_count": 1110.0,
+        "subproblem_time_sec": 0.04304300399962813,
+        "history": [
+          {
+            "iteration": 1,
+            "lower_bound": 176.0,
+            "flow": 567,
+            "best_flow": 567,
+            "time_sec": 0.013312940005562268,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 2,
+            "lower_bound": 219.0,
+            "flow": 531,
+            "best_flow": 531,
+            "time_sec": 0.024563241000578273,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 3,
+            "lower_bound": 228.0,
+            "flow": 526,
+            "best_flow": 526,
+            "time_sec": 0.04598341300152242,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 4,
+            "lower_bound": 235.0,
+            "flow": 617,
+            "best_flow": 526,
+            "time_sec": 0.07188780800061068,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 5,
+            "lower_bound": 245.0,
+            "flow": 567,
+            "best_flow": 526,
+            "time_sec": 0.13470603600580944,
+            "master_status": 2,
+            "master_nodes": 192.0
+          },
+          {
+            "iteration": 6,
+            "lower_bound": 247.0,
+            "flow": 536,
+            "best_flow": 526,
+            "time_sec": 0.1811483620040235,
+            "master_status": 2,
+            "master_nodes": 1.0
+          },
+          {
+            "iteration": 7,
+            "lower_bound": 253.0,
+            "flow": 582,
+            "best_flow": 526,
+            "time_sec": 0.2635523680000915,
+            "master_status": 2,
+            "master_nodes": 224.0
+          },
+          {
+            "iteration": 8,
+            "lower_bound": 253.0,
+            "flow": 514,
+            "best_flow": 514,
+            "time_sec": 0.32745728000008967,
+            "master_status": 2,
+            "master_nodes": 125.0
+          },
+          {
+            "iteration": 9,
+            "lower_bound": 257.0,
+            "flow": 257,
+            "best_flow": 257,
+            "time_sec": 0.457654021003691,
+            "master_status": 2,
+            "master_nodes": 564.0
+          }
+        ],
+        "cuts": [],
+        "any_terminal_incident": true,
+        "all_terminal_incident": true,
+        "terminal_incident_count": 6,
+        "relative_gap": 0.0
+      },
+      "classification": "excluded_terminal_optimum_witness"
+    }
+  ]
+}
