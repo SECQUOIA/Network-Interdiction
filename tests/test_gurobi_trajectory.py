@@ -69,9 +69,11 @@ def test_final_point_is_the_true_flow_of_the_returned_cuts():
 def test_run_case_records_times_and_a_consistent_trajectory():
     require_gurobi()
     row = rb.run_case(tiny('tiny_b'), 2, 'auto', 'gurobi', solvers=['sa'],
-                      baselines=['greedy', 'random', 'lp', 'lagrangian'], sa_seed=0)
+                      baselines=['greedy', 'random', 'lp', 'lagrangian', 'benders'], sa_seed=0)
     for column in rb.TIME_COLUMNS:
         assert isinstance(row[column], float) and row[column] >= 0, column
+    assert row['Gurobi_total_time_sec'] >= row['Gurobi_time_sec']
+    assert row['SA_total_time_sec'] >= row['SA_time_sec'] + row['SA_repair_time_sec']
     trajectory = json.loads(row[rb.TRAJECTORY_COLUMN])
     assert min(flow for _, flow in trajectory) == row['Opt_NIP']
 
@@ -80,9 +82,13 @@ def test_brute_backend_leaves_the_gurobi_columns_empty():
     row = rb.run_case(tiny('tiny_a'), 1, 'auto', 'brute', solvers=[],
                       baselines=['greedy'])
     assert row['Gurobi_time_sec'] == ''
+    assert row['Gurobi_total_time_sec'] == ''
+    assert row['SA_total_time_sec'] == ''
+    assert row['Reference_time_sec'] >= 0
     assert row[rb.TRAJECTORY_COLUMN] == ''
     assert row['Greedy_time_sec'] >= 0
-    for column in ('LP_time_sec', 'LP_repair_time_sec', 'Lagrangian_time_sec'):
+    for column in ('LP_time_sec', 'LP_repair_time_sec', 'Lagrangian_time_sec',
+                   'Benders_time_sec'):
         assert row[column] == ''
 
 

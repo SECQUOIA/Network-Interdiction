@@ -86,6 +86,12 @@ empty. LP_Round_Repair and Lagrangian_Feasible are feasible flows, not
 bounds. The LP and Lagrangian times include construction; LP repair is
 timed separately. See README for the formulations and numerical contracts.
 
+`benders` uses a binary interdiction master and integer max-flow cuts.
+Benders_status distinguishes a closed gap from a time/iteration limit;
+Benders and Benders_lower_bound bracket the optimum even on an incomplete
+run, subject to the master solver's numerical tolerances. The default
+cooperative wall limit is 60 seconds, with at most 1000 master solves.
+
 Choosing lambda (`auto`)
 ------------------------
 The budget term in nip_to_qubo() is linear, lambda * (sum(x) - B), so the
@@ -136,6 +142,7 @@ import numpy as np
 
 import network_interdiction as ni
 import classical_baselines as cb
+import benders
 
 # Every column network_interdiction_plot.py reads, in the order it reads them.
 PLOT_COLUMNS = [
@@ -166,17 +173,21 @@ BASELINE_COLUMNS = {
     'random': 'Random_Greedy',
     'lp': 'LP_Round_Repair',
     'lagrangian': 'Lagrangian_Feasible',
+    'benders': 'Benders',
 }
 
 # Wall time per method, and Gurobi's incumbent trajectory (last: it is long).
 TIME_COLUMNS = ['Gurobi_time_sec', 'SA_time_sec', 'SA_repair_time_sec',
                 'Greedy_time_sec', 'Random_Greedy_time_sec', 'LP_time_sec',
-                'LP_repair_time_sec', 'Lagrangian_time_sec']
+                'LP_repair_time_sec', 'Lagrangian_time_sec', 'Benders_time_sec',
+                'Gurobi_total_time_sec', 'SA_total_time_sec', 'Reference_time_sec']
 TRAJECTORY_COLUMN = 'Gurobi_trajectory'
 FLOW_COLUMNS = [col for cols in SOLVER_COLUMNS.values() for col in cols[:2]] \
     + list(BASELINE_COLUMNS.values())
 BOUND_COLUMNS = ['LP_lower_bound', 'LP_objective', 'Lagrangian_lower_bound',
-                 'Lower_bound', 'Lagrangian_iterations'] \
+                 'Lower_bound', 'Lagrangian_iterations', 'Benders_lower_bound',
+                 'Benders_status', 'Benders_iterations', 'Benders_history',
+                 'Benders_interdicted_edges'] \
     + [col + '_gap' for col in FLOW_COLUMNS]
 
 CSV_COLUMNS = CSV_COLUMNS[:-1] + list(BASELINE_COLUMNS.values()) + \
@@ -392,7 +403,8 @@ def gurobi_trajectory(di_g, src_node, tgt_node, B, threads):
 
 def run_case(instance, B, curr_λ, exact_backend, solvers,
              max_exact_vars=DEFAULT_MAX_EXACT_VARS, baselines=(), rng=None,
-             sa_seed=None, gurobi_threads=ni.DEFAULT_GUROBI_THREADS):
+             sa_seed=None, gurobi_threads=ni.DEFAULT_GUROBI_THREADS,
+             benders_time_limit=60.0, benders_max_iterations=1000):
     """
     Compute one CSV row. `instance` is a path to a flow file; `curr_λ` is a
     float or 'auto' (pick it from the exact window, see the module
@@ -413,6 +425,7 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
         'maxflow': max_flow(di_g, src_node, tgt_node),
     })
 
+    reference_start = time.perf_counter()
     if curr_λ == 'auto':
         curve = optimum_curve(exact_backend, di_g, src_node, tgt_node, B)
         lo, hi = lambda_window(curve, B)
@@ -431,10 +444,13 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
             max_exact_vars)
         row.update({'lambda': curr_λ, 'Opt_NIP': opt_nip,
                     'Opt_QUBO': opt_qubo})
+    row['Reference_time_sec'] = time.perf_counter() - reference_start
 
     if exact_backend == 'gurobi':
+        start = time.perf_counter()
         runtime, trajectory, objective = gurobi_trajectory(
             di_g, src_node, tgt_node, B, gurobi_threads)
+        row['Gurobi_total_time_sec'] = time.perf_counter() - start
         if round(objective) != round(float(row['Opt_NIP'])):
             raise ValueError(
                 f'{instance} B={B}: the trajectory solve found {objective}, '
@@ -442,10 +458,12 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
         row.update({'Gurobi_time_sec': runtime, TRAJECTORY_COLUMN: trajectory})
 
     for solver in solvers:
+        start = time.perf_counter()
         result = ni.qubo_verify_parameters(
             str(instance), di_g, curr_λ, src_node, tgt_node, B, solver=solver,
             seed=sa_seed)
         if solver == 'sa':
+            row['SA_total_time_sec'] = time.perf_counter() - start
             row['SA_time_sec'] = result['sample_time_sec']
             row['SA_repair_time_sec'] = result['postprocess_time_sec']
         nip_col, greedy_col, qubo_col = SOLVER_COLUMNS[solver]
@@ -488,6 +506,18 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
                                            if result['feasible_flow'] is not None else ''),
                     'Lagrangian_iterations': json.dumps(result['iterations']),
                     'Lagrangian_time_sec': time.perf_counter() - start})
+        bounds.append(result['lower_bound'])
+    if 'benders' in baselines:
+        result = benders.solve(di_g, src_node, tgt_node, B,
+                               time_limit=benders_time_limit,
+                               max_iterations=benders_max_iterations)
+        row.update({'Benders': result['flow'],
+                    'Benders_lower_bound': result['lower_bound'],
+                    'Benders_status': result['status'],
+                    'Benders_iterations': result['iterations'],
+                    'Benders_history': json.dumps(result['history']),
+                    'Benders_interdicted_edges': json.dumps(result['interdicted_edges']),
+                    'Benders_time_sec': result['runtime_sec']})
         bounds.append(result['lower_bound'])
     if bounds:
         row['Lower_bound'] = max(bounds)
@@ -589,7 +619,16 @@ def provenance_lines(args, solvers, baselines, rows=()):
         lines.append(f"Lagrangian: binary Gurobi solves, "
                      f"{ni.DEFAULT_GUROBI_THREADS} threads, lambda interval [0,maxflow]; "
                      "best global solver bound, subject to solver tolerances")
-    if 'lp' in baselines or 'lagrangian' in baselines:
+    if 'benders' in baselines:
+        lines.append(f"Benders: binary Gurobi master, {ni.DEFAULT_GUROBI_THREADS} "
+                     f"threads, NetworkX integer max-flow cuts, "
+                     f"{args.benders_time_limit:g}s cooperative wall limit, "
+                     f"{args.benders_max_iterations} master iterations; "
+                     "master bounds subject to solver tolerances")
+    lines.append("*_total_time_sec includes one method's construction, solve and "
+                 "scoring; Reference_time_sec separately covers exact references "
+                 "and any auto-lambda calibration; legacy Gurobi_time_sec is solve-only")
+    if any(name in baselines for name in ('lp', 'lagrangian', 'benders')):
         lines.append("*_gap = (feasible surviving flow - Lower_bound) / feasible "
                      "surviving flow; zero flow has gap 0; unrun/infeasible results are empty")
     if any(case[2] == 'auto' for case in args.cases):
@@ -640,10 +679,14 @@ def main(argv=None):
              '(default: sa)')
     parser.add_argument(
         '--baselines', type=parse_baselines, default='greedy,random',
-        metavar='greedy,random,lp,lagrangian',
+        metavar='greedy,random,lp,lagrangian,benders',
         help="comma-separated classical baselines: greedy, random, lp, "
-             "lagrangian (needs Gurobi), or "
+             "lagrangian, benders (last two need Gurobi), or "
              "'none' (default: greedy,random)")
+    parser.add_argument('--benders-time-limit', type=float, default=60.0,
+                        help='cooperative wall-clock seconds per Benders pass (default 60)')
+    parser.add_argument('--benders-max-iterations', type=int, default=1000,
+                        help='maximum master solves per Benders pass (default 1000)')
     parser.add_argument(
         '--seed', type=int, default=0,
         help='seed for simulated annealing and the random baseline '
@@ -664,6 +707,11 @@ def main(argv=None):
         parse_solvers(args.solvers)
     baselines = args.baselines if isinstance(args.baselines, list) else \
         parse_baselines(args.baselines)
+    if 'benders' in baselines:
+        if not math.isfinite(args.benders_time_limit) or args.benders_time_limit <= 0:
+            parser.error('--benders-time-limit must be positive and finite')
+        if args.benders_max_iterations < 1:
+            parser.error('--benders-max-iterations must be positive')
     # One generator for the whole run, so a CSV is reproducible from its
     # command line and seed alone.
     rng = np.random.default_rng(args.seed)
@@ -674,7 +722,9 @@ def main(argv=None):
         rows.append(run_case(instance, B, curr_λ, args.exact, solvers,
                              args.max_exact_vars, baselines, rng,
                              sa_seed=args.seed,
-                             gurobi_threads=args.gurobi_threads))
+                             gurobi_threads=args.gurobi_threads,
+                             benders_time_limit=args.benders_time_limit,
+                             benders_max_iterations=args.benders_max_iterations))
 
     write_csv(args.out, rows,
               provenance_lines(args, solvers, baselines, rows))
