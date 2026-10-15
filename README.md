@@ -1,6 +1,73 @@
 # Network-Interdiction
 Algorithms for solving maximum flow network interdiction problem with qubo-based solvers.
 
+## Offline minor-embedding resources
+
+[profile_embedding.py](profile_embedding.py) measures logical-to-physical qubit
+overhead with bounded `minorminer` searches on ideal Pegasus P16 (5640 qubits)
+and Zephyr Z12 with tile size 4 (4800 qubits). It uses only core dependencies,
+with no sampler, credential, live device query or QPU execution:
+
+```bash
+python profile_embedding.py --case testcases/tiny_a.flow:1:10 \
+    --case testcases/50.planarflow:5:10 --seed 0 --seed 1 \
+    --timeout 5 --out results/embedding.json
+```
+
+Cases use explicit penalties; this resource study performs no exact solve or
+penalty search. Every BQM variable is retained, including isolates; zero-valued
+quadratic terms need no physical coupler. Each attempt uses the supplied seed,
+one thread and `tries=1`, and reports embedding wall time separately from BQM /
+interaction-graph construction. The construction is reused across seeds and its
+time is repeated in those rows, so it should not be summed once per seed.
+An outer process deadline and memory limit are still appropriate for a campaign.
+
+Successful rows retain complete chains, physical qubits, overhead ratio, mean
+and maximum chain length and its histogram. Before accepting them, the script
+checks complete variable coverage, nonempty connected and disjoint chains, and
+a physical coupler for every logical interaction. Failures are explicitly
+`not_found_within_budget`; only an excess of logical variables over target
+qubits yields the stronger `too_many_logical_variables` refusal. Unmeasured
+physical usage and QPU time remain null. Reports are flushed after each attempt
+and pin source/input/topology hashes and library versions.
+
+These are ideal graph models. A live device's defective qubits/couplers can
+invalidate a mapping; embedding success says nothing about annealing quality,
+chain strength, solution feasibility or speedup. See D-Wave's
+[topology guidance](https://docs.dwavequantum.com/en/latest/quantum_research/example_topology_samplers.html)
+and [heuristic-search contract](https://docs.dwavequantum.com/en/latest/ocean/api_ref_system/generated/minorminer.find_embedding.html).
+This tool retains the existing `dwave-networkx` generator because its replacement,
+`dwave-graphs`, currently requires NumPy 2, incompatible with the repository's
+PyQUBO NumPy<2 requirement. No dependency constraints are overridden.
+
+The [saved 20-case study](results/embedding_resources.json) and its
+[manifest](results/embedding_resources.manifest.json) retain 80 attempts:
+two topologies and seeds 0/1, five seconds per call. All 52 tiny/medium attempts
+succeed; all 28 larger-case attempts exhaust their search without a mapping.
+The largest fitted case in that first cohort is the 149-variable medium ER
+instance: 159–160 physical qubits on P16 and 153–157 on Z12.
+
+A separate [30-second follow-up](results/embedding_large_resources.json)
+([manifest](results/embedding_large_resources.manifest.json)) preserves the
+earlier failures and makes one seed-0 attempt per 50-node family/topology:
+
+| Case (budget) | Logical variables | P16 physical qubits / max chain / seconds | Z12 physical qubits / max chain / seconds |
+| --- | ---: | --- | --- |
+| `50.planarflow` (5) | 912 | 1192 / 20 / 19.43 | 1288 / 20 / 10.13 |
+| `50_0.15.erdosflow` (5) | 1122 | Not found / — / 30.49 | 1685 / 20 / 13.88 |
+| `50_5.2dnnflow` (4) | 1068 | Not found / — / 30.44 | 1370 / 12 / 10.19 |
+
+The successful 50-node mappings use 1.28–1.50 physical qubits per logical
+variable. All 56 retained mappings across both studies also pass Ocean's
+separate embedding verifier. The longer searches demonstrate why a failed
+heuristic search must not be described as a size limit. They do not imply that
+the two remaining P16 cases cannot embed. No larger-budget attempts were made
+on the 70/75/125-node cases. The first and follow-up campaigns each completed
+once within their respective 600-/240-second outer limits and 8-GiB memory
+limits. Numerical libraries and minorminer used one thread. These are
+single/two-seed observations with different completed work, not a statistical
+comparison or an exact-repeatability claim across search budgets.
+
 ## Setup
 
 ```

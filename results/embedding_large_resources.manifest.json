@@ -1,0 +1,14 @@
+{
+  "source_commit": "6c1a510b4f228012b16f98199f547383a285b1ab",
+  "report_sha256": "016ad542940f9bc5538437890242c70f3a908220b9b757d4025334f76eea5203",
+  "campaign": "Bounded follow-up of three 50-node families after the first campaign's five-second failures",
+  "attempts": 1,
+  "minorminer_calls": 6,
+  "timeout_per_call_sec": 30,
+  "tries": 1,
+  "seed": 0,
+  "outer_timeout_sec": 240,
+  "virtual_memory_limit_gib": 8,
+  "numerical_threads": 1,
+  "scope": "4 valid mappings, 2 heuristic search failures. Earlier five-second attempts remain in embedding_resources.json; these longer searches do not overwrite or reclassify them. No hardware or infeasibility claim for failures."
+}
