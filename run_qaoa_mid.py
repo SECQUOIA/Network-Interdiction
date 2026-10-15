@@ -36,6 +36,7 @@ import argparse
 import csv
 import json
 import math
+from importlib.metadata import version
 import os
 import sys
 
@@ -52,7 +53,7 @@ COLUMNS = ['instance', 'family', 'B', 'qubits', 'reps', 'angles',
            'expected_energy', 'gap_closed', 'shot_p_optimal', 'p_feasible',
            'shot_mean_ratio', 'best_sample_energy', 'flow_before_repair',
            'flow_after_repair', 'opt_nip', 'greedy', 'maxflow',
-           'ground_energy', 'offset', 'sample_time_sec']
+           'ground_energy', 'offset', 'sample_time_sec', 'variables']
 
 
 def donor_angles(tiny_csv=TINY_CSV):
@@ -105,6 +106,9 @@ def main(argv=None):
         handle.write(f'# Aer matrix_product_state, bond dimension '
                      f'{args.bond_dimension}; {args.shots} shots, seed '
                      f'{args.seed}; donor angles from {TINY_CSV}\n')
+        handle.write(f'# versions: networkx {version("networkx")}, '
+                     f'qiskit {version("qiskit")}, qiskit-aer {version("qiskit-aer")}; '
+                     'qubit order recorded in each row as variables\n')
         writer = csv.DictWriter(handle, fieldnames=COLUMNS)
         writer.writeheader()
         handle.flush()
@@ -134,6 +138,7 @@ def main(argv=None):
                         'maxflow': problem.maxflow,
                         'ground_energy': problem.ground_energy,
                         'offset': problem.offset,
+                        'variables': json.dumps(problem.variables),
                     })
                     writer.writerow(out)
                     handle.flush()

@@ -10,6 +10,9 @@ reference simulation from tests/test_qaoa.py.
 """
 import math
 import os
+import json
+import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -50,6 +53,23 @@ def test_rcm_order_is_a_permutation_that_shortens_couplings():
         spans.append(max(abs(position[u] - position[v])
                          for u, v in bqm.quadratic))
     assert spans[1] < spans[0] / 3
+
+
+def test_rcm_order_is_stable_across_python_hash_seeds():
+    code = """
+import json
+import network_interdiction as ni
+import qaoa_common as qc
+g, s, t = ni.read_flow_file('testcases/mid/knn_6_2_s0.flow')
+print(json.dumps(qc.rcm_order(ni.nip_to_qubo(1, g, s, t, 5, 6))))
+"""
+    orders = [json.loads(subprocess.check_output(
+        [sys.executable, '-c', code],
+        cwd=os.path.dirname(os.path.dirname(__file__)),
+        env={**os.environ, 'PYTHONHASHSEED': str(seed)}, text=True))
+        for seed in (0, 1, 2)]
+    assert len(orders[0]) == 40
+    assert orders[0] == orders[1] == orders[2]
 
 
 def test_rcm_problem_has_the_same_energies(tiny_family, tiny_rcm):
@@ -138,6 +158,18 @@ def test_gap_closed_runs_from_uniform_to_ground(tiny_family):
     assert qc.gap_closed(tiny_family, uniform) == pytest.approx(0)
 
 
+def test_zero_budget_run_scores_optimal_feasible_shots():
+    module = backend_module('qiskit')
+    problem = qc.build_problem(TINY_A, 0)
+    backend = module.QiskitBackend(problem, 1)
+    result = qc.run_qaoa(backend, problem, 1, shots=200,
+                         theta=qc.linear_ramp(1))
+    assert result.opt_nip == result.greedy == result.flow_after_repair == 15
+    assert result.shot_p_optimal == result.p_feasible
+    assert result.shot_mean_ratio == result.p_feasible
+    assert np.isfinite(result.to_json()['shot_mean_ratio'])
+
+
 @needs_gurobi
 def test_gurobi_ground_energy_matches_enumeration(tiny_family):
     _, ground = rb.exact_reference('gurobi', tiny_family.di_g,
@@ -212,6 +244,8 @@ def test_mid_script_rows_for_donor_and_trained_angles(tmp_path):
     assert donor['evaluations'] == 0 and frame.iloc[1]['evaluations'] > 0
     for _, row in frame.iterrows():
         assert row['qubits'] == 40
+        variables = json.loads(row['variables'])
+        assert len(variables) == len(set(variables)) == 40
         assert row['gap_closed'] == pytest.approx(
             (row['offset'] - row['expected_energy'])
             / (row['offset'] - row['ground_energy']), abs=1e-5)

@@ -127,14 +127,16 @@ def rcm_order(bqm):
     variable_order(), one p = 1 evaluation of a 78-qubit instance had not
     finished after ten minutes; in this order a 40-qubit k-NN instance takes
     0.1 s, and a 53-qubit planar one 4.5 s with the bond dimension capped at
-    64. The order is deterministic (nodes are added in variable_order(),
-    which breaks the heuristic's ties).
+    64. The order is deterministic across Python hash seeds: the traversal
+    uses stable integer node IDs instead of randomized string hashes.
     """
+    variables = variable_order(bqm)
+    position = {label: i for i, label in enumerate(variables)}
     graph = nx.Graph()
-    graph.add_nodes_from(variable_order(bqm))
-    graph.add_edges_from(sorted(bqm.quadratic, key=lambda pair: tuple(
-        sorted(map(_family_key, pair)))))
-    return list(nx.utils.reverse_cuthill_mckee_ordering(graph))
+    graph.add_nodes_from(range(len(variables)))
+    graph.add_edges_from(sorted(
+        tuple(sorted((position[u], position[v]))) for u, v in bqm.quadratic))
+    return [variables[i] for i in nx.utils.reverse_cuthill_mckee_ordering(graph)]
 
 
 def ising_from_bqm(bqm, variables):
@@ -456,7 +458,9 @@ def score_samples(problem, counts, num_repaired=REPAIRED_SAMPLES):
                             (maxflow - flow) / (maxflow - opt_nip), the
                             measure the rest of the repository scores
                             methods by (1 = optimal), with over-budget shots
-                            scoring 0; no repair
+                            scoring 0; no repair. If no reduction is
+                            possible (for example B = 0), an optimal
+                            feasible shot scores 1 and other shots score 0.
 
     `counts` maps per-qubit bit tuples to shot counts.
     """
@@ -497,7 +501,8 @@ def score_samples(problem, counts, num_repaired=REPAIRED_SAMPLES):
             continue
         feasible += count
         optimal += count if flow == problem.opt_nip else 0
-        ratio_sum += count * (problem.maxflow - flow) / reduction
+        ratio_sum += count * ((problem.maxflow - flow) / reduction
+                              if reduction else float(flow == problem.opt_nip))
 
     return {
         'best_sample_energy': energy[lowest[0]],
