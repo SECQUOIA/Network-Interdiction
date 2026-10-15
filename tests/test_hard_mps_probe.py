@@ -24,3 +24,38 @@ def test_native_failure_preserves_completed_sampling_checkpoint(monkeypatch,caus
     assert result['last_completed_stage']=='sampler_completed'
     assert result['observed_counts']==saved['observed_counts']
     assert result['qubits']==1095
+
+
+def test_worker_refuses_existing_output_before_dispatch(tmp_path,monkeypatch):
+    path=tmp_path/'retained.json'
+    path.write_text('retain this attempt')
+    monkeypatch.setattr(probe,'worker',lambda *a:pytest.fail('worker dispatched'))
+    with pytest.raises(FileExistsError):
+        probe.main(['--worker','xy','--out',str(path)])
+    assert path.read_text()=='retain this attempt'
+
+
+def test_early_native_crash_with_empty_reservation_is_recorded(monkeypatch):
+    def run(command,**kwargs):
+        Path(command[-1]).touch()
+        return SimpleNamespace(returncode=-11)
+    monkeypatch.setattr(probe.subprocess,'run',run)
+    result=probe.run_method('penalty')
+    assert result['status']=='worker_failed'
+    assert result['last_completed_stage'] is None
+    assert result['returncode']==-11
+
+
+def test_retained_hard_probe_matches_original_flows_and_sample_energies():
+    import export_matched_results as exported
+    root=Path(__file__).resolve().parents[1]
+    artifact=json.loads((root/'results/hard_mps_probe.json').read_text())
+    summary=exported.audit_hard_probe(artifact)
+    assert summary==json.loads((root/'results/hard_mps_audit.json').read_text())
+    assert artifact['attempts']==[dict(attempt=1,status='completed',completed_methods=2)]
+    assert summary['optimum']==8
+    assert summary['basis_initial_flow']==summary['methods']['xy']['flow']==10
+    assert summary['methods']['xy']['exact_budget_shots']==241
+    assert summary['methods']['xy']['at_most_budget_shots']==254
+    assert summary['methods']['penalty']['shots']==0
+    assert artifact['methods']['xy']['metadata']['evaluations']==4

@@ -179,7 +179,7 @@ largest whole model whose four pieces all pass the QCI schema guard is the
 1,273-variable contact network (largest piece 361). That is an offline size
 observation, not a hardware result. The hard 1,095-variable covering case still
 needs pieces as large as 696; the 2,812-variable planar case needs 1,150.
-Neither is reached by the four-piece QCI or capped-MPS configuration. The three
+Neither is reached by the four-piece QCI or standard 256-qubit MPS configuration. The three
 new 12-second embedding-worker timeouts in the supplementary run remain explicit.
 
 These squared-budget embeddings include a clique among allowed interdiction
@@ -194,7 +194,7 @@ The [simulator artifact](../results/simulator_scaling.json) retains 42 method
 dispatches, with full observed counts for each completed quantum sampler.
 Statevector completed the 14- and 21-variable cases and refused larger inputs
 at its configured 24-variable guard. Approximate MPS completed at 149 variables,
-with bond dimension 8; this is the largest tested meaningful case, **not** a
+with bond dimension 8; this is the largest tested meaningful case in that initial ladder, **not** a
 universal maximum or a guarantee for smaller inputs.
 
 | Variables (B) | Exact flow | SA + repair | Penalty MPS raw / repaired | XY MPS raw / repaired | XY exact-B shots / 256 |
@@ -234,9 +234,9 @@ no runtime or solution-quality advantage follows from the gate count alone.
 
 The hard case has 1,095 variables and was refused by both simulator guards
 before backend construction. Its exact reference is 8 and bounded SA returns
-20. Its largest four-way piece is also above both guards. Thus a direct
-QAOA comparison on the measured hard set remains beyond this validated local
-configuration; this study records that gap instead of calling a refusal a run.
+20. Its largest four-way piece is also above both guards. The separate extended-MPS probe below executes the XY method directly on that
+case under a larger, explicitly bounded allowance; the first ladder's refusal
+remains recorded as a refusal.
 Actual device execution and QPU time remain excluded from this software series.
 
 To regenerate family plots, run `network_interdiction_plot.py --csv` on each
@@ -246,7 +246,7 @@ plot can also be generated, but its offset-dependent ratios should not be read
 as independent solution-quality evidence. The benchmark's exact squared-BQM
 energy column follows from the certified reduction: `Opt_NIP - beta*|A_I|`.
 
-## Separate hard-case MPS probe
+## Separate hard-case MPS probe and outcome
 
 The initial ladder's refusal reflects its configured 256-qubit cap. A separate
 `run_hard_mps_probe.py` experiment tests the actual 1,095-variable hard case
@@ -263,3 +263,32 @@ counts before scoring, and raw scores before repair. Scoring/repair receives a
 separate 20-second allowance inside the enclosing 600-second method cap. These
 four-evaluation probe results are separate from the eight-evaluation ladder and
 are not pooled with it. Only these two bounded attempts are planned.
+
+The [probe artifact](../results/hard_mps_probe.json) and its
+[independent audit](../results/hard_mps_audit.json) retain both outcomes:
+
+| Variant | Variables / stored BQM interactions | Process wall seconds | Outcome | Best selected raw / repaired flow |
+| --- | --- | ---: | --- | --- |
+| Squared penalty | 1,095 / 24,495 | 600.08 | outer time limit; no samples | — |
+| XY | 1,095 / 1,917 | 158.54 | completed; 256 shots | 10 / 10 |
+
+The stored BQMs include zero coefficients: the penalty/XY models have
+24,069/1,491 nonzero quadratic interactions. The conservative resource guard
+counts all stored interactions. The XY circuit had logical depth 52 and
+1,917 two-qubit gates, including its mixer. Of its 256 shots,
+241 have exactly B cuts and 254 satisfy the original at-most-B budget. The
+selected records and their energies/flows were independently audited. The
+original exact optimum is 8. **The initial first-B basis cut already has flow
+10**, so this probe does not demonstrate any objective improvement from QAOA.
+It establishes that the approximate simulator can execute this particular
+1,095-variable XY circuit within the stated allowance. It does not establish
+uniform feasibility, performance at every smaller size, or quantum advantage.
+
+The original Gurobi run proved flow 8 in 12.16 seconds. Benders' flow 14 and the
+matched SA/decomposition results used different, shorter work allowances than
+this 158.54-second quantum-simulator process; their flows must not be presented
+as a controlled speedup comparison. The archived penalty timeout retains its
+pre-sampling checkpoint and contributes zero samples, not a fabricated score.
+The raw certificate records conservative coefficients; the audit explicitly
+records effective cardinality penalty 1,735 for penalty QAOA and zero for XY.
+No further attempts were made in this probe campaign.

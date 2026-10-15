@@ -45,7 +45,8 @@ def worker(method,out):
     if method=='xy':
         bqm=ni.nip_to_qubo(B,graph,source,sink,0,certificate.dual,allowed)
     details=dict(status='running_sampler',method=method,qubits=len(bqm),couplings=bqm.num_interactions,
-                 certificate=asdict(certificate),compile_time_sec=time.perf_counter()-started,
+                 certificate=asdict(certificate),cardinality_penalty=0 if method=='xy' else certificate.cardinality,
+                 compile_time_sec=time.perf_counter()-started,
                  variables=list(bqm.variables),raw_samples=[],observed_counts=[])
     checkpoint(out,details)
     options={}
@@ -92,7 +93,7 @@ def run_method(method):
                 code=process.returncode
             except subprocess.TimeoutExpired:
                 outcome='outer_time_limit';code=None
-        result=json.loads(path.read_text()) if path.exists() else {}
+        result=json.loads(path.read_text()) if path.exists() and path.stat().st_size else {}
         if outcome!='returned':
             result.update(last_completed_stage=result.get('status'),status=outcome,returncode=code)
         result.update(process_wall_sec=time.perf_counter()-start,outer_seconds=OUTER_SECONDS)
@@ -105,6 +106,8 @@ def main(argv=None):
     parser.add_argument('--worker',choices=METHODS)
     args=parser.parse_args(argv)
     if args.worker:
+        with args.out.open('x'):
+            pass
         resource.setrlimit(resource.RLIMIT_AS,(8*1024**3,8*1024**3))
         worker(args.worker,args.out)
         return

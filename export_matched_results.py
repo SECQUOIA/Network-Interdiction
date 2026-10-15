@@ -238,5 +238,65 @@ def audit_simulators(artifact):
     return summary
 
 
+def audit_hard_probe(artifact):
+    """Audit any completed/partial hard-probe observations, preserving failures."""
+    import run_hard_mps_probe as probe
+    import network_interdiction as ni
+    case,g,s,t,B,allowed=probe.inputs()
+    reference=matched.cases_and_references()['cover_n30_s0',B]
+    if (artifact['case']['sha256']!=case['sha256'] or
+            artifact['reference']['sha256']!=reference['reference_sha256'] or
+            artifact['reference']['result']!=reference['archived']['milp']):
+        raise ValueError('stale hard-probe reference')
+    optimum=artifact['reference']['result']['flow']
+    penalty,certificate=certified_squared_qubo(B,g,s,t,allowed)
+    initial_cut=sorted(allowed)[:B]
+    initial_flow=cut_flow(g,s,t,allowed,B,initial_cut)
+    summary=dict(source_commit=artifact['source_commit'],case_sha256=case['sha256'],
+                 optimum=optimum,basis_initial_cut=[list(e) for e in initial_cut],basis_initial_flow=initial_flow,methods={})
+    for method,result in artifact['methods'].items():
+        if method not in ('penalty','xy') or result['status'] in ('dispatched','running_sampler'):
+            raise ValueError('incomplete hard-probe method')
+        bqm=penalty if method=='penalty' else ni.nip_to_qubo(B,g,s,t,0,certificate.dual,allowed)
+        if result.get('qubits')!=len(bqm) or result.get('couplings')!=bqm.num_interactions:
+            raise ValueError('hard-probe model mismatch')
+        if result.get('certificate')!=asdict(certificate):
+            raise ValueError('hard-probe penalty mismatch')
+        check=dict(status=result['status'],process_wall_sec=result['process_wall_sec'],
+                   effective_cardinality_penalty=certificate.cardinality if method=='penalty' else 0,
+                   stored_bqm_interactions=bqm.num_interactions,
+                   nonzero_bqm_interactions=int(sum(value!=0 for value in bqm.quadratic.values())),
+                   shots=0,exact_budget_shots=0,at_most_budget_shots=0,
+                   best_selected_raw_feasible_flow=None,flow=result.get('flow'))
+        counts=result.get('observed_counts',[])
+        if counts:
+            variables=result['variables']
+            if len(variables)!=len(bqm) or set(variables)!=set(bqm.variables):
+                raise ValueError('hard-probe variable mismatch')
+            for row in counts:
+                if len(row['bits'])!=len(variables) or set(row['bits'])-{'0','1'}:
+                    raise ValueError('invalid hard-probe bits')
+                sample=dict(zip(variables,map(int,row['bits'])))
+                if bqm.energy(sample)!=row['energy']:
+                    raise ValueError('hard-probe energy mismatch')
+                n=sum(sample.get(f'x_{i}',0) for i,e in enumerate(sorted(g.edges())) if e in allowed)
+                count=row['occurrences']
+                if type(count) is not int or count<=0:
+                    raise ValueError('invalid hard-probe multiplicity')
+                check['shots']+=count
+                check['exact_budget_shots']+=count*(n==B)
+                check['at_most_budget_shots']+=count*(n<=B)
+            if check['shots']!=256:
+                raise ValueError('incomplete hard-probe shot count')
+            audit_samples(result,bqm,g,s,t,allowed,B)
+            raw=[r['flow'] for r in result['raw_samples'] if r['budget_feasible'] and r['flow'] is not None]
+            check['best_selected_raw_feasible_flow']=min(raw) if raw else None
+        if 'flow' in result:
+            if result['flow']<optimum or result['flow']!=cut_flow(g,s,t,allowed,B,result['interdicted_edges']):
+                raise ValueError('invalid hard-probe solution')
+        summary['methods'][method]=check
+    return summary
+
+
 if __name__=='__main__':
     main()
