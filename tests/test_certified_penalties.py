@@ -128,6 +128,7 @@ def test_comparison_size_guard_precedes_compilation(tmp_path, monkeypatch):
 
 
 def test_actual_gurobi_comparison_on_empty_window_fixture(tmp_path):
+    import json
     import gurobipy as gp
     import run_penalty_comparison as comparison
     path = tmp_path / 'equal.flow'
@@ -140,3 +141,4 @@ def test_actual_gurobi_comparison_on_empty_window_fixture(tmp_path):
     assert row['qubo_energy'] + row['certificate']['normalized_offset'] == 5
     assert row['linear_window']['strict_window'] is False
     assert row['squared_couplers'] - row['linear_couplers'] == 6
+    assert json.loads(json.dumps(row, allow_nan=False))['squared_couplers'] == row['squared_couplers']

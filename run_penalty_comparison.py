@@ -97,8 +97,8 @@ def run_case(path, B):
                   'hi': hi if math.isfinite(hi) else None, 'strict_window': lo < hi}
     return {'instance': str(path), 'input_sha256': digest(path), 'budget': B,
             'certificate': asdict(cert), 'variables': len(bqm),
-            'linear_couplers': sum(c != 0 for c in linear.quadratic.values()),
-            'squared_couplers': sum(c != 0 for c in bqm.quadratic.values()),
+            'linear_couplers': int(sum(c != 0 for c in linear.quadratic.values())),
+            'squared_couplers': int(sum(c != 0 for c in bqm.quadratic.values())),
             'build_seconds': build_seconds, 'qubo_seconds': solve_seconds,
             'milp_seconds': milp_seconds, 'qubo_energy': energy, 'qubo_bound': bound,
             'nip_optimum': optimum, 'nip_bound': milp_bound, 'decoded_flow': flow,
