@@ -3,7 +3,7 @@
 The SDK requires NetworkX <3; this repository requires >=3.2. Install
 requirements-qci.txt into a separate environment and set QCI_PYTHON to its
 Python executable. QCI_TOKEN stays in the environment, never in JSON or argv.
-Calling solve_bqm_qci submits one hardware job; there are no automatic job resubmission.
+Calling solve_bqm_qci submits one hardware job; there is no automatic resubmission.
 """
 import json
 import math
@@ -133,4 +133,12 @@ def solve_bqm_qci(bqm, *, python_executable=None, num_samples=20,
         job = next((m['job_id'] for m in messages if m.get('job_id')), 'unknown')
         raise RuntimeError(f'QCI worker failed; job ID {job}. Check SDK setup, credentials '
                            'and remote job state before resubmitting.')
-    return decode_response(bqm, variables, messages[-1], int(num_samples))
+    try:
+        return decode_response(bqm, variables, messages[-1], int(num_samples))
+    except (ValueError, RuntimeError, TypeError, KeyError) as error:
+        job = next((m['job_id'] for m in messages if m.get('job_id')), 'unknown')
+        # Do not expose arbitrary response values or a third-party exception
+        # message. The job receipt is enough to retrieve the detailed diagnosis.
+        raise RuntimeError(f'QCI job ID {job}: unsuccessful or invalid result '
+                           f'({type(error).__name__}). Inspect the remote job '
+                           'before resubmitting.') from None

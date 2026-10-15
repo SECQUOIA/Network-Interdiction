@@ -130,6 +130,21 @@ def test_timeout_retains_job_receipt_and_does_not_retry(monkeypatch):
     assert len(calls) == 1 and 'secret-placeholder' not in str(error.value)
 
 
+@pytest.mark.parametrize('status', ['ERRORED', 'CANCELLED', 'COMPLETED'])
+def test_result_validation_failure_retains_receipt_without_retry(monkeypatch, status):
+    monkeypatch.setenv('QCI_TOKEN', 'placeholder')
+    result = response([[0.5, 0, 1]], [20])
+    result['status'] = status
+    calls = []
+    def launch(command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(returncode=0, stdout=json.dumps(result)+'\n')
+    monkeypatch.setattr(qci.subprocess, 'run', launch)
+    with pytest.raises(RuntimeError, match='offline-job'):
+        qci.solve_bqm_qci(model(), python_executable='unused')
+    assert len(calls) == 1
+
+
 def test_configuration_absence_does_not_start_a_worker(monkeypatch):
     monkeypatch.delenv('QCI_PYTHON', raising=False)
     monkeypatch.delenv('QCI_TOKEN', raising=False)
