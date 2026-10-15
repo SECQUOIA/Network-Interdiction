@@ -44,9 +44,9 @@ leave a duality gap even for that approximation. 'marginal' solves that
 allocation exactly by dynamic programming; 'multiplier' retains its own
 price history and surrogate gap. Neither gives a bound on global NIP flow.
 refine_split() repairs what treating the pieces' savings as additive gets
-wrong. Comparing against Benders (#15) and evaluating on real networks
-(#1) are still to do. run_decomposition_benchmark.py measures every rule
-against the exact optimum.
+wrong. run_decomposition_benchmark.py measures every rule against the exact
+optimum; the saved three-case comparison also uses the Benders sample.
+Full-cohort and real-network comparisons remain under #14/#15 and #1.
 
 Command line
 ------------

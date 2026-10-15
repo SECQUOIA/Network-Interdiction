@@ -146,6 +146,36 @@ includes measuring every curve, and partition time is separate. The CSV
 retains actual interdicted arcs, surrogate status/bounds/curves and the price
 history. Each completed variant is flushed before another solve starts.
 
+The saved [common-price comparison](results/common_multiplier_comparison.csv)
+contains all 36 combinations of four allocation rules, three solve modes,
+and the three cases in the [Benders sample](results/classical_baselines_sample.csv).
+Its [manifest](results/common_multiplier_comparison.json) pins the source,
+inputs, reference artifact, versions and limits. Four pieces, partition seed
+0, at most six free terminals per exact contraction, and 100 price updates
+were used. Within this sample, all three solve modes gave the same flow for
+each rule:
+
+| Instance (budget) | Exact / Benders | Mincut split | Local-flow split | DP marginal | Common price | Largest piece QUBO |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `50.planarflow` (5) | 276 | 288 | 313 | 276 | 276 | 261 |
+| `50_0.15.erdosflow` (5) | 358 | 414 | 405 | 358 | 358 | 315 |
+| `50_5.2dnnflow` (4) | 165 | 172 | 285 | 165 | 165 | 355 |
+
+The common-price allocation gap closed after 2 updates on planar and 6 on
+2D nearest-neighbor. On Erdős–Rényi it remained `iteration_limit` after 100
+updates: surrogate lower bound 2670.913498606068, feasible surrogate value
+2671. Its actual combined flow nevertheless equals the independently known
+global optimum, 358. That does not make the surrogate iteration converge.
+
+For sequential solving, common-price elapsed time including partitioning
+was 0.498, 0.517 and 0.399 seconds; the pinned Benders runs took 0.111, 0.049
+and 0.075 seconds. The decomposition timers include all curve measurement
+work. These are single runs in separate processes with different execution
+orders and no dedicated warmup, so they do not support a statistical speedup
+claim. The cases are easy synthetic networks; full-cohort and real-network
+comparisons remain under #14/#15. None of these four-piece partitions fits
+156 logical qubits, and no physical embedding or hardware run is claimed.
+
 ## QAOA on simulators (Qiskit and CUDA-Q)
 
 The same QUBO the annealer samples can be solved with a penalty-QAOA, written
