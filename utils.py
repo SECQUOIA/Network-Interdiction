@@ -674,3 +674,156 @@ def plot_time_vs_quality(df: pd.DataFrame) -> plt.Figure:
     fig.tight_layout()
     framed_legend(fig, handles, ncol=4)
     return fig
+
+
+# ── QAOA (issues #3, #16) ───────────────────────────────────────────────────
+# run_qaoa_benchmark.py writes results/qaoa_tiny.csv: one row per tiny
+# instance, budget and QAOA depth p. The instance colours are Okabe-Ito hues
+# not used for a method elsewhere in the notebook; each instance also has its
+# own marker, because two of the hues are close under deuteranopia. Depth is
+# ordered, so it gets one hue, light to dark.
+QAOA_INSTANCE_STYLE = {
+    "tiny_a": ("#0072B2", "o"),
+    "tiny_b": ("#E69F00", "s"),
+    "tiny_c": ("#009E73", "^"),
+    "tiny_d": ("#CC79A7", "D"),
+}
+QAOA_BUDGET_LINESTYLE = {1: "-", 2: "--"}
+QAOA_DEPTH_COLORS = {1: "#D9A6C6", 2: "#B5648F", 3: "#7A2E57"}
+
+
+def load_qaoa_results(csv_path: Path) -> pd.DataFrame:
+    """
+    Read run_qaoa_benchmark.py's CSV and add ``name`` (the instance file's
+    stem), ``case`` ("tiny_a B=1"), and the enrichments: P(optimal
+    interdiction) over its value for the uniform state, for the trained
+    angles (``enrichment``) and for the transferred ones
+    (``transfer_enrichment``; NaN on the donor's rows).
+    """
+    df = pd.read_csv(csv_path, comment="#")
+    df["name"] = df["instance"].map(lambda path: Path(path).stem)
+    df["case"] = df["name"] + " B=" + df["B"].astype(str)
+    df["enrichment"] = df["p_optimal"] / df["uniform_p_optimal"]
+    df["transfer_enrichment"] = df["transfer_p_optimal"] / df["uniform_p_optimal"]
+    return df
+
+
+def qaoa_vs_classical_table(qaoa: pd.DataFrame, sample: pd.DataFrame,
+                            reps: int) -> pd.DataFrame:
+    """
+    One row per case: the classical results from run_benchmark.py's sample
+    CSV beside QAOA at depth ``reps``. The flow columns are surviving max
+    flow (lower is better; ``optimum`` is the best possible). A blank "QAOA
+    raw" means no shot among the 20 lowest-energy ones respected the budget.
+    """
+    merged = qaoa[qaoa["reps"] == reps].merge(
+        sample, on=["instance", "B"], how="left", validate="one_to_one")
+    table = pd.DataFrame({
+        "qubits": merged["qubits"],
+        "optimum": merged["Opt_NIP"],
+        "greedy": merged["Greedy"],
+        "SA raw": merged["SA_NIP"],
+        "SA + repair": merged["SA_NIP_Greedy"],
+        "QAOA raw": merged["flow_before_repair"],
+        "QAOA + repair": merged["flow_after_repair"],
+        "P(optimal), QAOA": merged["p_optimal"],
+        "P(optimal), uniform": merged["uniform_p_optimal"],
+    })
+    table.index = merged["case"].values
+    table.index.name = f"p = {reps}"
+    return table
+
+
+def _qaoa_case_lines(ax: plt.Axes, qaoa: pd.DataFrame, column: str) -> None:
+    """One line per case over depth p, coloured and marked by instance."""
+    for case, sub in qaoa.groupby("case", sort=False):
+        sub = sub.sort_values("reps")
+        color, marker = QAOA_INSTANCE_STYLE[sub["name"].iloc[0]]
+        ax.plot(sub["reps"], sub[column], color=color, marker=marker,
+                markersize=8, linewidth=2,
+                linestyle=QAOA_BUDGET_LINESTYLE[sub["B"].iloc[0]],
+                markeredgecolor="white", markeredgewidth=0.8)
+
+
+def _qaoa_instance_handles(qaoa: pd.DataFrame) -> list:
+    handles = []
+    for name in dict.fromkeys(qaoa["name"]):
+        color, marker = QAOA_INSTANCE_STYLE[name]
+        qubits = sorted(set(qaoa.loc[qaoa["name"] == name, "qubits"]))
+        handles.append(Line2D([], [], color=color, marker=marker,
+                              markersize=8, linestyle="",
+                              label=f"{name} ({qubits[0]} qubits)"))
+    return handles
+
+
+def plot_qaoa_depth(qaoa: pd.DataFrame) -> plt.Figure:
+    """
+    Left: approximation ratio (E_max - <H_C>) / (E_max - E_min) against QAOA
+    depth p. Right: P(optimal interdiction) relative to the uniform state's,
+    so 1 is no better than measuring a random state.
+    """
+    fig, (ax_ratio, ax_enrich) = plt.subplots(1, 2, figsize=(12.5, 5.2))
+    _qaoa_case_lines(ax_ratio, qaoa, "approx_ratio")
+    ax_ratio.set_ylabel("approximation ratio")
+    _qaoa_case_lines(ax_enrich, qaoa, "enrichment")
+    ax_enrich.axhline(1.0, color=C_REFERENCE, linestyle=":", linewidth=1.3)
+    ax_enrich.text(qaoa["reps"].max(), 1.0, "uniform state  ", ha="right",
+                   va="bottom", color=C_REFERENCE, fontsize=11)
+    ax_enrich.set_ylabel("P(optimal) / P(optimal, uniform)")
+    ax_enrich.set_ylim(bottom=0)
+    depths = sorted(qaoa["reps"].unique())
+    for ax in (ax_ratio, ax_enrich):
+        ax.set_xticks(depths)
+        ax.set_xlabel("QAOA depth p")
+        style_axes(ax)
+    handles = _qaoa_instance_handles(qaoa)
+    handles += [Line2D([], [], color="#555555", linewidth=2, linestyle=style,
+                       label=f"B = {budget}")
+                for budget, style in QAOA_BUDGET_LINESTYLE.items()]
+    fig.tight_layout()
+    framed_legend(fig, handles, ncol=len(handles))
+    return fig
+
+
+def plot_qaoa_transfer(qaoa: pd.DataFrame) -> plt.Figure:
+    """
+    Every case except the donor, at every depth: the score of its own
+    trained angles (x) against the donor's angles applied unchanged (y).
+    Points on the diagonal lose nothing by transferring. Colour is the
+    depth, marker the instance.
+    """
+    rows = qaoa.dropna(subset=["transfer_p_optimal"])
+    fig, axes = plt.subplots(1, 2, figsize=(12.5, 5.6))
+    panels = [("approx_ratio", "transfer_approx_ratio", "approximation ratio"),
+              ("enrichment", "transfer_enrichment",
+               "P(optimal) / P(optimal, uniform)")]
+    for ax, (trained, transferred, label) in zip(axes, panels):
+        for _, row in rows.iterrows():
+            ax.scatter(row[trained], row[transferred], s=80,
+                       marker=QAOA_INSTANCE_STYLE[row["name"]][1],
+                       color=QAOA_DEPTH_COLORS[row["reps"]],
+                       edgecolor="white", linewidth=0.8, zorder=3)
+        values = pd.concat([rows[trained], rows[transferred]])
+        pad = 0.05 * (values.max() - values.min())
+        limits = (values.min() - pad, values.max() + pad)
+        ax.plot(limits, limits, color=C_REFERENCE, linestyle="--",
+                linewidth=1.2, zorder=1)
+        ax.set_xlim(limits)
+        ax.set_ylim(limits)
+        ax.set_aspect("equal")
+        ax.set_title(label)
+        ax.set_xlabel("own trained angles")
+        ax.set_ylabel("transferred angles")
+        style_axes(ax)
+    donor = qaoa.loc[qaoa["transfer_p_optimal"].isna(), "case"].iloc[0]
+    fig.suptitle(f"Angles trained on {donor}, reused unchanged", fontsize=14)
+    handles = [Line2D([], [], color=color, marker="o", markersize=9,
+                      linestyle="", label=f"p = {reps}")
+               for reps, color in QAOA_DEPTH_COLORS.items()]
+    handles += [Line2D([], [], color="#777777", marker=marker, markersize=8,
+                       linestyle="", label=name)
+                for name, (_color, marker) in QAOA_INSTANCE_STYLE.items()
+                if name in set(rows["name"])]
+    fig.tight_layout()
+    framed_legend(fig, handles, ncol=len(handles))
+    return fig

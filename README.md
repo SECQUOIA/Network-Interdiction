@@ -27,6 +27,10 @@ You'll also need:
   `NotImplementedError` if called. Use `nip_to_qubo()` +
   `qubo_verify_parameters()` instead (the path `main()` actually runs), which
   builds the QUBO directly via PyQUBO with no external process.
+- **Qiskit and CUDA-Q, only for the QAOA modules** (see
+  [QAOA](#qaoa-on-simulators-qiskit-and-cuda-q) below):
+  `pip install -r requirements.txt -r requirements-qaoa.txt`. No GPU or
+  account is needed; both run on CPU simulators.
 
 ## Running
 
@@ -69,6 +73,58 @@ fixed before any piece is solved. Two limits to know:
 `solve_decomposed()` solves the pieces sequentially (each seeing what earlier
 pieces cut) or independently, with `brute_force_piece_solver` for small
 pieces or `qubo_piece_solver(lambda)` for the annealer.
+
+## QAOA on simulators (Qiskit and CUDA-Q)
+
+The same QUBO the annealer samples can be solved with a penalty-QAOA, written
+twice: once in Qiskit ([qaoa_qiskit.py](qaoa_qiskit.py), Aer simulators) and
+once in CUDA-Q ([qaoa_cudaq.py](qaoa_cudaq.py)). Issues #3 and #16 start
+here. Both build the Ising form of `nip_to_qubo()`'s QUBO through
+[qaoa_common.py](qaoa_common.py), use the standard X mixer, train the angles
+with COBYLA against the exact expectation value, and score the trained state
+the same way:
+
+```
+python qaoa_qiskit.py testcases/tiny_a.flow --budget 1 --reps 2
+python qaoa_cudaq.py  testcases/tiny_a.flow --budget 1 --reps 2
+```
+
+Each prints the expected QUBO energy, the probability of measuring the
+ground state and of measuring an optimal interdiction (exact, from the
+statevector), and the best surviving flow among the shots before and after
+the same greedy repair the annealer passes use. The uniform superposition's
+scores and the greedy baseline are printed alongside. `--json` saves the
+result. Lambda is `auto` by default: the midpoint of its exact window, as
+in `run_benchmark.py`. A budget with an empty window is refused, because no
+lambda makes the ground state the answer.
+
+[run_qaoa_benchmark.py](run_qaoa_benchmark.py) runs depths p = 1, 2, 3 over
+the six rows of `results/sample_results_sa.csv` and writes
+[results/qaoa_tiny.csv](results/qaoa_tiny.csv); its docstring has the exact
+command. It also scores the angles trained on the first row, reused unchanged
+on every other row, which is the baseline for parameter transfer (#16). The
+QAOA section of [notebooks/analysis.ipynb](notebooks/analysis.ipynb) puts
+these results next to simulated annealing and greedy. A rerun is close to the
+committed file but not bit-identical: Aer's multithreaded simulation can sum
+in a different order, so COBYLA can end a few 1e-5 away in the angles. In two
+runs, the exact scores agreed to 1e-5 and the shot estimates of P(optimal) to
+0.02.
+
+The two backends prepare the same state for the same angles, and the tests
+check both against an independent numpy simulation. The angles are ordered
+`[beta..., gamma...]`, the order of Qiskit's `qaoa_ansatz()` and of
+`qaoa_training_pipeline`. The Hamiltonian is scaled to coefficients of at
+most 1, so angles are comparable across instances with different capacities
+and lambdas, which parameter transfer (#16) needs.
+
+Limits:
+
+- Statevector simulation of the full `V + 3E - 2`-qubit QUBO caps this at
+  24 qubits, which means the `tiny_*` instances (14 to 22 qubits).
+- CUDA-Q's CPU simulator (`qpp-cpu`) is much slower than Aer: 0.3 to 1
+  second per evaluation at 14 qubits, against milliseconds for Aer. It is
+  faster with `OMP_NUM_THREADS=1` at these sizes. On a GPU, pass
+  `--target nvidia`.
 
 ## Benchmark results and plots
 
