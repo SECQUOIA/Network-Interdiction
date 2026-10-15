@@ -110,3 +110,40 @@ def test_unselected_qaoa_and_empty_window_remain_unmeasured(monkeypatch, tmp_pat
                                   (ROOT / 'testcases/tiny_a.flow', 6, [])]:
         row = rb.run_case(str(instance), 1, lam, 'brute', solvers)
         assert all(value == '' for key, value in row.items() if key.startswith('QAOA_'))
+
+
+@pytest.mark.parametrize('options', [
+    {'method':'mps', 'max_qubits':257, 'max_bond_dimension':8},
+    {'method':'mps', 'max_bond_dimension':None},
+    {'method':'mps', 'max_bond_dimension':65},
+    {'method':'mps', 'max_bond_dimension':True},
+    {'method':'mps', 'max_bond_dimension':8, 'reps':4},
+    {'method':'mps', 'max_bond_dimension':8, 'shots':10001},
+    {'method':'statevector', 'max_bond_dimension':8}])
+def test_mps_limits_precede_optional_backend_work(options, monkeypatch):
+    import builtins
+    original = builtins.__import__
+    def guard(name, *args, **kwargs):
+        if name in ('qaoa_common','qaoa_qiskit'):
+            pytest.fail('backend work dispatched')
+        return original(name,*args,**kwargs)
+    monkeypatch.setattr(builtins,'__import__',guard)
+    with pytest.raises(ValueError):
+        sampler.solve_bqm_qaoa(dimod.BQM({'a':1},{},0,'BINARY'), **options)
+
+
+def test_actual_capped_mps_matches_small_statevector_energy_and_labels(aer):
+    bqm = dimod.BQM({'third':-3,'first':1,'second':2},
+                    {('third','first'):-5,('first','second'):1.5},11,'BINARY')
+    exact = sampler.solve_bqm_qaoa(bqm, shots=1024, maxiter=8, seed=7, order='rcm')
+    approx = sampler.solve_bqm_qaoa(bqm, shots=1024, maxiter=8, seed=7, order='rcm',
+                                   method='mps', max_bond_dimension=8, max_qubits=256)
+    em,am = [r.info['qaoa_metadata'] for r in [exact,approx]]
+    assert am['expected_energy'] == pytest.approx(em['expected_energy'], abs=1e-9)
+    assert am['theta'] == pytest.approx(em['theta'], abs=1e-9)
+    assert am['max_bond_dimension']==8 and am['approximate']
+    assert am['mps_truncation_threshold']==1e-16
+    assert am['variables']==em['variables']
+    assert sum(approx.record.num_occurrences)==1024
+    for record in approx.data():
+        assert record.energy==bqm.energy(record.sample)

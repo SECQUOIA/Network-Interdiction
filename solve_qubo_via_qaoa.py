@@ -14,7 +14,8 @@ import dimod
 import numpy as np
 
 
-def validate_options(*, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=24):
+def validate_options(*, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=24,
+                     method='statevector', max_bond_dimension=None, order='bqm'):
     """Reject invalid resource controls before any optional backend import."""
     for name, value in [('reps', reps), ('shots', shots), ('maxiter', maxiter),
                         ('max_qubits', max_qubits), ('seed', seed)]:
@@ -22,8 +23,15 @@ def validate_options(*, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=24):
             raise ValueError(f'QAOA {name} must be an integer')
     if reps < 1 or shots < 1 or maxiter < 2*reps + 2:
         raise ValueError('QAOA needs reps/shots >=1 and maxiter >=2*reps+2 (COBYLA minimum)')
-    if not 1 <= max_qubits <= 24:
-        raise ValueError('this statevector adapter requires max_qubits in 1..24')
+    if method not in ('statevector', 'mps') or order not in ('bqm', 'rcm'):
+        raise ValueError('invalid simulation method or variable order')
+    if method == 'statevector':
+        if not 1 <= max_qubits <= 24 or max_bond_dimension is not None:
+            raise ValueError('statevector requires max_qubits in 1..24 and no bond cap')
+    elif (isinstance(max_bond_dimension, bool) or not isinstance(max_bond_dimension, numbers.Integral)
+          or not 1 <= max_bond_dimension <= 64 or not 1 <= max_qubits <= 256
+          or reps > 3 or shots > 10000 or maxiter > 100):
+        raise ValueError('MPS requires 1..256 qubits, bond cap 1..64, p<=3, shots<=10000 and maxiter<=100')
     if not 0 <= seed < 2**32:
         raise ValueError('QAOA seed must be in 0..2**32-1')
 
@@ -38,11 +46,12 @@ def validate_bqm(bqm, max_qubits):
 
 
 def solve_bqm_qaoa(bqm, *, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=24,
-                   fixed_weight_variables=None, hamming_weight=None, initial_state='basis'):
+                   fixed_weight_variables=None, hamming_weight=None, initial_state='basis',
+                   method='statevector', max_bond_dimension=None, order='bqm'):
     """Return raw SampleSet records with original BQM energies and run metadata.
 
     Uses one COBYLA start (the existing linear ramp), exact Aer statevector
-    expectations, and seeded Aer shots. The best <=20 distinct observed records
+    or explicitly capped approximate MPS expectations, and seeded Aer shots. The best <=20 distinct observed records
     are selected later by the shared NIP scorer. The 24-qubit hard cap is a local
     memory guard, not a hardware-fit claim. All three stage times are wall time;
     building includes imports and Hamiltonian/circuit construction, training
@@ -51,15 +60,21 @@ def solve_bqm_qaoa(bqm, *, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=2
     An optional fixed-weight variable register selects the XY mixer. Its
     Hamming weight is enforced by state preparation and gates; the caller
     supplies the appropriate objective and is responsible for any remaining
-    penalties. This does not silently change the BQM or its energy units.
+    penalties. MPS has a separate 256-qubit cap and requires an explicit bond
+    dimension <=64; truncation can leak out of an XY fixed-weight subspace.
+    ``order='rcm'`` uses the existing deterministic interaction-graph ordering. This does not silently change the BQM or its energy units.
     """
-    validate_options(reps=reps, shots=shots, maxiter=maxiter, seed=seed, max_qubits=max_qubits)
+    validate_options(reps=reps, shots=shots, maxiter=maxiter, seed=seed, max_qubits=max_qubits,
+                     method=method, max_bond_dimension=max_bond_dimension, order=order)
     validate_bqm(bqm, max_qubits)
     start = time.perf_counter()
     import qaoa_common as qc
     from qaoa_qiskit import QiskitBackend
 
-    variables = list(bqm.variables)
+    variables = (list(bqm.variables) if order == 'bqm' else
+                 qc.rcm_order(bqm, initial_order=list(bqm.variables)))
+    if max_bond_dimension is not None:
+        max_bond_dimension = int(max_bond_dimension)
     h, J, offset = qc.ising_from_bqm(bqm, variables)
     scale = float(max(np.max(np.abs(h)), max(map(abs, J.values()), default=0)))
     if scale == 0 or not all(math.isfinite(v) for v in [*h, *J.values(), offset]):
@@ -77,7 +92,8 @@ def solve_bqm_qaoa(bqm, *, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=2
         mixer.validate(len(variables))
     elif hamming_weight is not None or initial_state != 'basis':
         raise ValueError('fixed-weight settings require a variable register')
-    backend = QiskitBackend(problem, int(reps), fixed_weight=mixer)
+    backend = QiskitBackend(problem, int(reps), fixed_weight=mixer, method=method,
+                             max_bond_dimension=max_bond_dimension)
     build_time = time.perf_counter() - start
     start = time.perf_counter()
     theta, value, evaluations = qc.optimize_angles(
@@ -87,10 +103,13 @@ def solve_bqm_qaoa(bqm, *, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=2
     counts = backend.sample(theta, int(shots), int(seed))
     sample_time = time.perf_counter() - start
     metadata = {
-        'backend': 'qiskit-aer', 'method': 'statevector', 'reps': int(reps),
+        'backend': 'qiskit-aer', 'method': method, 'reps': int(reps),
         'shots': int(shots), 'seed': int(seed), 'maxiter': int(maxiter),
         'max_qubits': int(max_qubits), 'num_qubits': len(variables),
-        'variables': variables, 'theta': [float(t) for t in theta],
+        'variables': variables, 'variable_order': order, 'max_bond_dimension': max_bond_dimension,
+        'approximate': method == 'mps',
+        'mps_truncation_threshold': 1e-16 if method == 'mps' else None,
+        'theta': [float(t) for t in theta],
         'angle_order': 'beta layers, then gamma layers', 'hamiltonian_scale': scale,
         'evaluations': int(evaluations), 'expected_energy': float(value*scale + offset),
         'build_time_sec': build_time, 'train_time_sec': train_time,

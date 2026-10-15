@@ -86,6 +86,8 @@ class QiskitBackend:
         self.reps = reps
         self.method = method
         self.backend_options = {'method': METHODS[method]}
+        if method == 'mps':
+            self.backend_options['matrix_product_state_truncation_threshold'] = 1e-16
         if max_bond_dimension is not None:
             if method != 'mps':
                 raise ValueError('max_bond_dimension applies to method mps')

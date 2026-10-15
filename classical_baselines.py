@@ -25,7 +25,7 @@ def _validate(graph, source, sink, budget):
             raise ValueError('capacities must be finite and nonnegative')
 
 
-def _lp_model(graph, source, sink, budget):
+def _lp_model(graph, source, sink, budget, interdictable=None):
     """Continuous min-cut/interdiction formulation, ordered as x, z, pi.
 
     min sum c_e z_e; pi_u-pi_v <= x_e+z_e; sum x_e <= B;
@@ -51,6 +51,13 @@ def _lp_model(graph, source, sink, budget):
     rhs = np.zeros(m + 1)
     rhs[-1] = budget
     bounds = [(0, 1)] * (2 * m + n)
+    if interdictable is not None:
+        allowed = set(interdictable)
+        if not allowed <= set(edges) or budget > len(allowed):
+            raise ValueError('invalid interdictable set or budget')
+        for i, edge in enumerate(edges):
+            if edge not in allowed:
+                bounds[i] = (0, 0)
     bounds[positions[source]] = (1, 1)
     bounds[positions[sink]] = (0, 0)
     return edges, cost, matrix, rhs, bounds
@@ -83,39 +90,49 @@ def box_dual_bound(cost, matrix, rhs, bounds, marginals):
     return rounded
 
 
-def lp_round_repair(graph, source, sink, budget):
-    """Solve the continuous relaxation with HiGHS, round at 1/2, then repair.
+def lp_relaxation(graph, source, sink, budget, *, interdictable=None, time_limit=None):
+    """Return the fractional LP solution and rationally checked lower bound.
 
-    Uses the same greedy add/remove repair as the annealer. Returned cuts
-    use sorted arc order, including when graph insertion order differs.
-    The LP time includes construction and certificate validation; repair
-    time includes rounding, the greedy pass and its final max-flow score.
+    Optional allowed arcs match the MILP; fixed x bounds are included in the
+    certificate. A HiGHS time limit never becomes an optimal LP result. The
+    optional limit applies to HiGHS; construction/certification are timed too.
     """
     _validate(graph, source, sink, budget)
+    if time_limit is not None and (isinstance(time_limit, bool) or
+            not math.isfinite(time_limit) or time_limit <= 0):
+        raise ValueError('LP time limit must be positive and finite')
     start = time.perf_counter()
-    edges, cost, matrix, rhs, bounds = _lp_model(graph, source, sink, budget)
-    result = linprog(cost, A_ub=matrix, b_ub=rhs, bounds=bounds, method='highs')
+    edges, cost, matrix, rhs, bounds = _lp_model(graph, source, sink, budget, interdictable)
+    options = {} if time_limit is None else {'time_limit': float(time_limit)}
+    result = linprog(cost, A_ub=matrix, b_ub=rhs, bounds=bounds, method='highs', options=options)
     if not result.success:
         raise RuntimeError(f'LP relaxation failed: {result.message}')
     if not np.all(np.isfinite(result.x)) or not math.isfinite(result.fun):
         raise RuntimeError('LP returned a non-finite solution')
-    lower_bound = box_dual_bound(cost, matrix, rhs, bounds,
-                                 result.ineqlin.marginals)
-    elapsed = time.perf_counter() - start
+    lower_bound = box_dual_bound(cost, matrix, rhs, bounds, result.ineqlin.marginals)
+    return {'lower_bound': lower_bound, 'lp_objective': float(result.fun),
+            'fractional_x': result.x[:len(edges)].tolist(),
+            'lp_time_sec': time.perf_counter() - start}
+
+
+def lp_round_repair(graph, source, sink, budget, *, interdictable=None):
+    """Solve the continuous relaxation, round at 1/2, then greedily repair.
+
+    Returned cuts use sorted arc order. LP time includes construction and
+    certificate validation; repair time includes rounding and final scoring.
+    """
+    allowed = None if interdictable is None else set(interdictable)
+    result = lp_relaxation(graph, source, sink, budget, interdictable=allowed)
     start = time.perf_counter()
-    fractional = result.x[:len(edges)]
-    rounded = [int(value >= 0.5) for value in fractional]
-    cuts, flow = ni.improve_dwave_solution(graph, rounded, source, sink, budget)
-    return {
-        'lower_bound': lower_bound,
-        'lp_objective': float(result.fun),
-        'fractional_x': fractional.tolist(),
-        'rounded_edges': [edge for edge, bit in zip(edges, rounded) if bit],
-        'interdicted_edges': cuts,
-        'flow': float(flow),
-        'lp_time_sec': elapsed,
-        'repair_time_sec': time.perf_counter() - start,
-    }
+    edges = sorted(graph.edges())
+    rounded = [int(value >= 0.5) for value in result['fractional_x']]
+    repair_options = {} if allowed is None else {'candidate_edges': allowed}
+    cuts, flow = ni.improve_dwave_solution(graph, rounded, source, sink, budget,
+                                          **repair_options)
+    result.update(rounded_edges=[edge for edge, bit in zip(edges, rounded) if bit],
+                  interdicted_edges=cuts, flow=float(flow),
+                  repair_time_sec=time.perf_counter() - start)
+    return result
 
 
 def relative_gap(feasible_flow, lower_bound):

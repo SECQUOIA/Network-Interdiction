@@ -494,7 +494,8 @@ def solve_nip_gurobi_trajectory(G, src_node, tgt_node, B, threads=None):
         'trajectory': [(t, surviving_flow(cut)) for t, cut in incumbents],
     }
 
-def improve_dwave_solution(di_g, x, src_node, tgt_node, B, candidate_edges=None):
+def improve_dwave_solution(di_g, x, src_node, tgt_node, B, candidate_edges=None,
+                            *, flow_oracle=None):
     """
     Greedily add/remove interdicted edges so exactly B edges are
     interdicted, then return the resulting edge set and its max-flow
@@ -504,6 +505,10 @@ def improve_dwave_solution(di_g, x, src_node, tgt_node, B, candidate_edges=None)
     (issue #14: a decomposition piece may only interdict the arcs it owns,
     so there must be at least B of them). By default every edge is a
     candidate, as before.
+
+    Optional `flow_oracle(cut)` supplies the same surviving-flow score. Bounded
+    benchmark callers use it to count/cache max-flow work and enforce a shared
+    deadline; exceptions propagate so the caller can retain its audited incumbent.
 
     `x` is a 0/1 array indexed like sorted(di_g.edges()) -- the caller's
     own decode of its sample, not a raw sample dict. This used to decompose
@@ -519,6 +524,8 @@ def improve_dwave_solution(di_g, x, src_node, tgt_node, B, candidate_edges=None)
     re-fixing it to match one format again.
     """
     def compute_objective(di_g, src_node, tgt_node, interdicted_edges):
+        if flow_oracle is not None:
+            return flow_oracle(interdicted_edges)
         di_g_copy = di_g.copy()
         for (u,v) in interdicted_edges:
             di_g_copy.remove_edge(u,v)

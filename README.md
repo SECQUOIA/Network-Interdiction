@@ -949,3 +949,9 @@ The other variables keep X mixing and a cut-link penalty. See the
 `run_xy_comparison.py` compares it with penalty QAOA and SA using the same
 original MILP references and shot/repair scorer. This is a simulator feature;
 IBM Runtime remains on the existing penalty ansatz.
+
+For bounded comparisons on real, legacy and interior-arc hard cases, see
+[matched software comparisons and simulator scaling](docs/matched_scaling.md).
+The opt-in BQM QAOA adapter supports explicitly capped approximate MPS via
+`method='mps', max_qubits=256, max_bond_dimension=8`; the default remains the
+24-qubit statevector path. `order='rcm'` selects interaction-graph ordering.

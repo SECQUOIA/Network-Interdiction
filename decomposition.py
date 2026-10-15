@@ -882,7 +882,7 @@ def qubo_piece_solver(cardinality_penalty_coeff, dual_penalty_coeff=None,
 
 def solve_decomposed(di_g, src_node, tgt_node, pieces, budgets, solve_piece,
                      mode='sequential', max_terminals=DEFAULT_MAX_TERMINALS,
-                     max_rounds=DEFAULT_MAX_ROUNDS):
+                     max_rounds=DEFAULT_MAX_ROUNDS, flow_oracle=None):
     """
     Solve every piece with a positive budget and combine the interdictions.
 
@@ -902,8 +902,12 @@ def solve_decomposed(di_g, src_node, tgt_node, pieces, budgets, solve_piece,
                    only lets a piece answer the pieces before it; this lets
                    the early pieces answer the later ones too.
 
+    Optional `flow_oracle(cut)` supplies the same whole-network score, allowing
+    benchmark callers to count and limit scoring work. Exceptions propagate.
     Returns (interdicted arcs, max flow of `di_g` without them).
     """
+    score = (flow_oracle if flow_oracle is not None else
+             lambda cut: _surviving_flow(di_g, src_node, tgt_node, cut))
     if mode not in SOLVE_MODES:
         raise ValueError(f"unknown mode {mode!r}, expected one of "
                          f"{', '.join(SOLVE_MODES)}")
@@ -928,7 +932,7 @@ def solve_decomposed(di_g, src_node, tgt_node, pieces, budgets, solve_piece,
     for index in active:
         fixed = () if mode == 'independent' else interdicted
         interdicted.extend(solve(index, fixed))
-    flow = _surviving_flow(di_g, src_node, tgt_node, interdicted)
+    flow = score(interdicted)
     if mode != 'iterated':
         return interdicted, flow
 
@@ -937,8 +941,7 @@ def solve_decomposed(di_g, src_node, tgt_node, pieces, budgets, solve_piece,
         for index in active:
             others = [arc for arc in interdicted if owners[arc] != index]
             candidate = others + solve(index, others)
-            candidate_flow = _surviving_flow(di_g, src_node, tgt_node,
-                                             candidate)
+            candidate_flow = score(candidate)
             if candidate_flow < flow:
                 interdicted, flow, improved = candidate, candidate_flow, True
         if not improved:
