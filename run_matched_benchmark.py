@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import platform
 import resource
+import signal
 import subprocess
 import sys
 import tempfile
@@ -169,6 +170,23 @@ def worker(manifest, name, budget, method):
     return bb.decomposed(graph, source, sink, B, allowed, rule=rule, mode=mode)
 
 
+def run_isolated_process(command, *, stdout, stderr, timeout):
+    """Bound a worker and its descendants in one POSIX process group."""
+    with subprocess.Popen(command, stdout=stdout, stderr=stderr,
+                          start_new_session=True) as process:
+        try:
+            process.wait(timeout=timeout)
+        except BaseException:
+            # A timeout or interruption must not orphan native embedding workers.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait()
+            raise
+        return subprocess.CompletedProcess(command, process.returncode)
+
+
 def process_call(arguments, *, timeout=120, script='run_matched_benchmark.py'):
     """Return explicit failure status; never turn a timeout into a solved row."""
     with tempfile.TemporaryDirectory(prefix='nip-matched-') as directory:
@@ -177,9 +195,9 @@ def process_call(arguments, *, timeout=120, script='run_matched_benchmark.py'):
         start = time.perf_counter()
         with log.open('w') as handle:
             try:
-                process = subprocess.run([sys.executable, str(ROOT/script),
-                                          '--worker', *arguments, '--out', str(output)],
-                                         stdout=handle, stderr=handle, timeout=timeout)
+                process = run_isolated_process(
+                    [sys.executable, str(ROOT/script), '--worker', *arguments, '--out', str(output)],
+                    stdout=handle, stderr=handle, timeout=timeout)
             except subprocess.TimeoutExpired:
                 return dict(status='outer_time_limit', process_wall_sec=time.perf_counter()-start,
                             outer_time_limit_sec=timeout)

@@ -86,9 +86,10 @@ def run_method(method):
         start=time.perf_counter()
         with (Path(directory)/'stderr.log').open('w') as log:
             try:
-                process=subprocess.run([sys.executable,str(ROOT/'run_hard_mps_probe.py'),
-                                        '--worker',method,'--out',str(path)],
-                                       stdout=log,stderr=log,timeout=OUTER_SECONDS)
+                process=matched.run_isolated_process(
+                    [sys.executable,str(ROOT/'run_hard_mps_probe.py'),
+                     '--worker',method,'--out',str(path)],
+                    stdout=log,stderr=log,timeout=OUTER_SECONDS)
                 outcome='returned' if process.returncode==0 else 'worker_failed'
                 code=process.returncode
             except subprocess.TimeoutExpired:

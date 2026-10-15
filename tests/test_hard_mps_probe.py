@@ -18,7 +18,7 @@ def test_native_failure_preserves_completed_sampling_checkpoint(monkeypatch,caus
         if cause=='timeout':
             raise subprocess.TimeoutExpired(command,kwargs['timeout'])
         return SimpleNamespace(returncode=-11)
-    monkeypatch.setattr(probe.subprocess,'run',run)
+    monkeypatch.setattr(probe.matched,'run_isolated_process',run)
     result=probe.run_method('penalty')
     assert result['status']==('outer_time_limit' if cause=='timeout' else 'worker_failed')
     assert result['last_completed_stage']=='sampler_completed'
@@ -39,7 +39,7 @@ def test_early_native_crash_with_empty_reservation_is_recorded(monkeypatch):
     def run(command,**kwargs):
         Path(command[-1]).touch()
         return SimpleNamespace(returncode=-11)
-    monkeypatch.setattr(probe.subprocess,'run',run)
+    monkeypatch.setattr(probe.matched,'run_isolated_process',run)
     result=probe.run_method('penalty')
     assert result['status']=='worker_failed'
     assert result['last_completed_stage'] is None
