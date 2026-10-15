@@ -15,7 +15,8 @@ on slides 11-12 of the S-T_NIP deck:
    super-source/super-sink attached to its boundary vertices ('local'; read
    here as in proportion to it). A third rule, 'marginal', solves each
    piece for 0..B cuts first and gives the budget to the pieces whose cuts
-   save the most (marginal_split()).
+   save the most (marginal_split()). 'multiplier' instead tunes one shared
+   budget price by subgradient ascent on those same per-piece curves.
 4. piece_subproblem() builds the network one piece is solved on. Only the
    piece's own arcs may be interdicted there, so the rest of the graph
    carries no budget and is contracted exactly (contract_zone());
@@ -37,11 +38,13 @@ with X removed (and with whatever earlier pieces interdicted). A per-piece
 QUBO whose ground state is its optimum -- lambda inside that piece's window,
 see #2 -- therefore solves the piece exactly.
 
-The decomposition as a whole is a heuristic. A split is optimal only if
-every piece's last interdiction is worth the same (the common-multiplier
-condition in #14); 'marginal' aims at that from measured per-piece curves,
-and refine_split() repairs what treating the pieces' savings as additive
-gets wrong. Comparing against Benders (#15) and evaluating on real networks
+The decomposition as a whole is a heuristic. A common budget price optimizes
+only a separable approximation to the allocation, and nonconvex curves can
+leave a duality gap even for that approximation. 'marginal' solves that
+allocation exactly by dynamic programming; 'multiplier' retains its own
+price history and surrogate gap. Neither gives a bound on global NIP flow.
+refine_split() repairs what treating the pieces' savings as additive gets
+wrong. Comparing against Benders (#15) and evaluating on real networks
 (#1) are still to do. run_decomposition_benchmark.py measures every rule
 against the exact optimum.
 
@@ -53,6 +56,8 @@ Print the per-piece QUBO sizes next to the whole-graph size:
 """
 import argparse
 import itertools
+import math
+import numbers
 import sys
 from dataclasses import dataclass
 from fractions import Fraction
@@ -62,7 +67,7 @@ import networkx as nx
 import network_interdiction as ni
 import solve_qubo_via_dwave
 
-SPLIT_STRATEGIES = ('mincut', 'local', 'marginal')
+SPLIT_STRATEGIES = ('mincut', 'local', 'marginal', 'multiplier')
 SOLVE_MODES = ('sequential', 'independent', 'iterated')
 
 # Rounds of re-solving every piece in 'iterated' mode, and budget moves
@@ -298,7 +303,8 @@ def apportion(B, weights):
 
 
 def split_budget(di_g, src_node, tgt_node, B, pieces, strategy='mincut',
-                 solve_piece=None, max_terminals=DEFAULT_MAX_TERMINALS):
+                 solve_piece=None, max_terminals=DEFAULT_MAX_TERMINALS,
+                 multiplier_iterations=100):
     """
     Split the budget B between `pieces`: one integer per piece, summing to B
     unless no piece has any weight (then all zero, see apportion()).
@@ -312,9 +318,11 @@ def split_budget(di_g, src_node, tgt_node, B, pieces, strategy='mincut',
     'marginal'  by what each piece's cuts are worth: marginal_split(), with
                 `solve_piece` (gurobi_piece_solver by default) measuring
                 every piece's best flow for 0..B cuts
+    'multiplier' the same curves, but allocated by one subgradient-tuned
+                price; common_multiplier_split() also returns its history
 
     'mincut' and 'local' are proportional rules decided from the graph
-    alone; 'marginal' solves the pieces first. All three are decided before
+    alone; 'marginal' and 'multiplier' solve the pieces first. All are decided before
     the pieces are combined; refine_split() revises a split afterwards.
     """
     if strategy == 'mincut':
@@ -327,6 +335,12 @@ def split_budget(di_g, src_node, tgt_node, B, pieces, strategy='mincut',
             solve_piece if solve_piece is not None else gurobi_piece_solver,
             max_terminals)
         return budgets
+    elif strategy == 'multiplier':
+        result = common_multiplier_split(
+            di_g, src_node, tgt_node, B, pieces,
+            solve_piece if solve_piece is not None else gurobi_piece_solver,
+            max_terminals=max_terminals, max_iterations=multiplier_iterations)
+        return result['budgets']
     else:
         raise ValueError(
             f"unknown split strategy {strategy!r}, expected one of "
@@ -529,6 +543,8 @@ def gurobi_piece_solver(sub, budget):
     only its arcs interdictable (Gurobi license required). It scales to
     pieces brute force cannot, so it is the exact per-piece reference for
     the benchmarks: with it, the only error left is the decomposition's.
+    Requests zero MIP gap and requires OPTIMAL, subject to Gurobi's numerical
+    tolerances. Interrupted or incomplete solves do not supply exact curves.
     Returns original arcs.
     """
     size = min(budget, len(sub.interdictable))
@@ -536,8 +552,13 @@ def gurobi_piece_solver(sub, budget):
         return []
     model, x = ni._build_nip_milp(sub.graph, sub.src, sub.tgt, size,
                                   sub.interdictable)
-    model.optimize()
-    return [sub.arc_map[arc] for arc in sub.interdictable if x[arc].X > 0.5]
+    with model:
+        model.Params.MIPGap = 0
+        model.Params.MIPGapAbs = 0
+        model.optimize()
+        if model.Status != ni.GRB.OPTIMAL:
+            raise RuntimeError(f'piece oracle did not prove optimality: status {model.Status}')
+        return [sub.arc_map[arc] for arc in sub.interdictable if x[arc].X > 0.5]
 
 
 def piece_curves(di_g, src_node, tgt_node, B, pieces, solve_piece,
@@ -572,10 +593,10 @@ def marginal_split(di_g, src_node, tgt_node, B, pieces, solve_piece,
     sum_P s_P(B_P) subject to sum_P B_P = B (or every arc, if fewer), by
     dynamic programming over the pieces.
 
-    One multiplier for all pieces, the rule #14 describes, solves this same
-    allocation through its Lagrangian; it agrees with the exact allocation
-    when every curve is convex and can miss it otherwise, so the exact one
-    is used. Treating savings as additive is the heuristic part: two pieces
+    One multiplier for all pieces, implemented by common_multiplier_split(),
+    relaxes this allocation through its Lagrangian; convex curves have no
+    duality gap, while nonconvex curves can. This function uses exact dynamic
+    programming instead. Treating savings as additive is the heuristic part: two pieces
     that cut the same flow path save less together than apart, which
     'iterated' solving and refine_split() correct afterwards.
 
@@ -608,6 +629,135 @@ def allocate_budget(curves, B):
                     step[used + k] = candidate
         best = step
     return best[total][1]
+
+
+def _validate_multiplier_limits(B, max_iterations):
+    if not isinstance(B, numbers.Integral) or isinstance(B, bool) or B < 0:
+        raise ValueError('budget must be a nonnegative integer')
+    if (not isinstance(max_iterations, numbers.Integral)
+            or isinstance(max_iterations, bool) or max_iterations < 1):
+        raise ValueError('max_iterations must be a positive integer')
+
+
+def allocate_budget_multiplier(curves, B, *, max_iterations=100):
+    """Tune one budget price for the separable per-piece allocation surrogate.
+
+    Minimize sum_i f_i(k_i), sum_i k_i <= B, over the supplied finite,
+    nonincreasing curves. At price lambda >= 0, each piece independently
+    minimizes f_i(k) + lambda*k. Their total count minus B is a supergradient
+    of the concave dual. Projected ascent uses M/(G*sqrt(t)), where M is
+    the largest marginal drop and G bounds the count violation. A price
+    above M selects zero cuts, so [0,M] contains a dual optimum.
+
+    Each requested allocation is repaired deterministically to the available
+    budget, retaining the best feasible surrogate value and best dual bound.
+    Integer/binary-float inputs and prices are evaluated with Fraction; the
+    exported lower bound rounds down, and the feasible value rounds up.
+    `optimal_surrogate` requires an exactly closed rational gap. Nonconvex
+    curves can have a positive duality gap even after tuning converges.
+
+    THESE ARE NOT BOUNDS ON GLOBAL INTERDICTION. Per-piece savings overlap;
+    the combined cut must still be scored on the actual original network.
+    """
+    _validate_multiplier_limits(B, max_iterations)
+    exact = []
+    for curve in curves:
+        if not len(curve):
+            raise ValueError('each curve must contain at least its zero-budget flow')
+        try:
+            valid = all(math.isfinite(value) and value >= 0 for value in curve)
+        except (TypeError, OverflowError):
+            valid = False
+        if not valid:
+            raise ValueError('curve values must be finite and nonnegative')
+        values = [Fraction(int(value)) if isinstance(value, numbers.Integral)
+                  else Fraction(float(value)) for value in curve]
+        if any(a < b for a, b in zip(values, values[1:])):
+            raise ValueError('flow curves must be nonincreasing')
+        exact.append(values)
+    if sum((curve[0] for curve in exact), Fraction(0)) > Fraction(sys.float_info.max):
+        raise ValueError('summed surrogate flow exceeds the finite export range')
+    capacity = sum(len(curve) - 1 for curve in exact)
+    target = min(int(B), capacity)
+    scale = max((a - b for curve in exact for a, b in zip(curve, curve[1:])),
+                default=Fraction(0))
+    violation_bound = max(1, target, capacity - target)
+    price = scale if target == 0 else Fraction(0)
+
+    def rounded(value, direction):
+        result = float(value)
+        if (direction < 0 and Fraction(result) > value
+                or direction > 0 and Fraction(result) < value):
+            result = math.nextafter(result, direction * math.inf)
+        return result
+
+    def repair(requested):
+        allocation = requested.copy()
+        while sum(allocation) > target:
+            i = min((i for i, k in enumerate(allocation) if k),
+                    key=lambda i: (exact[i][allocation[i]-1] - exact[i][allocation[i]], i))
+            allocation[i] -= 1
+        while sum(allocation) < target:
+            i = min((i for i, k in enumerate(allocation) if k+1 < len(exact[i])),
+                    key=lambda i: (exact[i][allocation[i]+1] - exact[i][allocation[i]], i))
+            allocation[i] += 1
+        return allocation
+
+    best_value, best_lower = None, Fraction(-1)
+    best_allocation, allocation_price, bound_price = None, None, None
+    history = []
+    status = 'iteration_limit'
+    for iteration in range(1, max_iterations + 1):
+        requested = [min(range(len(curve)), key=lambda k: (curve[k] + price*k, k))
+                     for curve in exact]
+        violation = sum(requested) - target
+        dual = sum((curve[k] + price*k for curve, k in zip(exact, requested)),
+                   Fraction(0)) - price*target
+        # Nonnegativity is another valid bound and avoids exporting a very
+        # negative dual value outside the float range at an excessive price.
+        dual = max(Fraction(0), dual)
+        allocation = repair(requested)
+        value = sum((curve[k] for curve, k in zip(exact, allocation)), Fraction(0))
+        if best_value is None or value < best_value:
+            best_value, best_allocation, allocation_price = value, allocation, price
+        if dual > best_lower:
+            best_lower, bound_price = dual, price
+        history.append({'iteration': iteration, 'multiplier': float(price),
+                        'multiplier_exact': str(price),
+                        'requested_budgets': requested, 'budget_violation': violation,
+                        'repaired_budgets': allocation,
+                        'surrogate_value': rounded(value, 1),
+                        'surrogate_lower_bound': rounded(dual, -1),
+                        'best_surrogate_value': rounded(best_value, 1),
+                        'best_surrogate_lower_bound': rounded(best_lower, -1)})
+        if best_value == best_lower:
+            status = 'optimal_surrogate'
+            break
+        step = Fraction(float(scale) / (violation_bound * math.sqrt(iteration)))
+        price = min(scale, max(Fraction(0), price + step*violation))
+    return {'budgets': best_allocation, 'target_budget': target,
+            'surrogate_value': rounded(best_value, 1),
+            'surrogate_lower_bound': rounded(best_lower, -1),
+            'allocation_multiplier': float(allocation_price),
+            'bound_multiplier': float(bound_price),
+            'status': status, 'iterations': len(history), 'history': history}
+
+
+def common_multiplier_split(di_g, src_node, tgt_node, B, pieces, solve_piece,
+                            max_terminals=DEFAULT_MAX_TERMINALS, *, max_iterations=100):
+    """Measure per-piece curves, then tune one common allocation price.
+
+    Returns allocation diagnostics plus the actual curves. The default
+    piece solver used by split_budget is exact; with a heuristic solver the
+    bounds describe only the supplied measured curves. All curve solves
+    happen before price tuning and must be included in allocation timing.
+    """
+    _validate_multiplier_limits(B, max_iterations)
+    curves = piece_curves(di_g, src_node, tgt_node, B, pieces, solve_piece,
+                          max_terminals=max_terminals)
+    result = allocate_budget_multiplier(curves, B, max_iterations=max_iterations)
+    result['curves'] = curves
+    return result
 
 
 def refine_split(di_g, src_node, tgt_node, pieces, budgets, solve_piece,
@@ -811,6 +961,8 @@ def main(argv=None):
                         help='interdiction budget B to split')
     parser.add_argument('--split', choices=SPLIT_STRATEGIES, default='mincut',
                         help='budget split rule (default: mincut)')
+    parser.add_argument('--multiplier-iterations', type=int, default=100,
+                        help='shared-price updates for the multiplier split (default 100)')
     parser.add_argument('--seed', type=int, default=0,
                         help='seed for the partition (default: 0)')
     parser.add_argument('--max-terminals', type=int,
@@ -819,6 +971,8 @@ def main(argv=None):
                              'many free terminals (default: '
                              f'{DEFAULT_MAX_TERMINALS})')
     args = parser.parse_args(argv)
+    if args.split == 'multiplier' and args.multiplier_iterations < 1:
+        parser.error('--multiplier-iterations must be positive')
 
     di_g, src_node, tgt_node = ni.read_flow_file(args.instance)
     if args.fit_qubits:
@@ -829,7 +983,8 @@ def main(argv=None):
     else:
         pieces = partition_graph(di_g, args.pieces, seed=args.seed)
     budgets = split_budget(di_g, src_node, tgt_node, args.budget, pieces,
-                           args.split, max_terminals=args.max_terminals)
+                           args.split, max_terminals=args.max_terminals,
+                           multiplier_iterations=args.multiplier_iterations)
     owners = arc_owners(di_g, pieces)
     # The coefficients do not change which variables a QUBO has.
     whole = len(ni.nip_to_qubo(args.budget, di_g, src_node, tgt_node,

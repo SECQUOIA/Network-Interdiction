@@ -12,7 +12,7 @@ partitioned two ways:
               default, the size of an IBM Heron device; partition_to_fit()),
               labelled fit156 in the CSV
 
-and every budget rule (mincut, local, marginal) is solved in every mode
+and every budget rule (mincut, local, marginal, multiplier) is solved in every mode
 (independent, sequential, iterated). Each piece is solved exactly
 (gurobi_piece_solver()), so the only error left is the decomposition's: the
 split, and how the pieces' cuts combine. With --refine, a 'marginal+refine'
@@ -33,6 +33,17 @@ optimum, greedy, maxflow  from the slide CSV
 time_sec                  wall time of the split and the solve; the
                           partition is shared and timed separately
 partition_sec             wall time of that partition
+interdicted_edges          actual combined cut, as JSON
+allocation_status, surrogate_value, surrogate_lower_bound
+                          multiplier allocation diagnostics ONLY; the lower
+                          bound is not a bound on global NIP flow
+allocation_curves, multiplier_history
+                          measured curves and every shared-price update
+
+--rules and --modes restrict the comparison. --max-terminals caps exact
+contractions at 0..12 boundary terminals; --multiplier-iterations caps the
+price updates. All curve measurement work is included in time_sec. The
+split is measured once and charged in full to each mode using that split.
 
 When no partition fits -- a piece whose surroundings cannot be contracted
 keeps most of the graph's nodes, so on 125.planarflow no number of pieces
@@ -50,7 +61,6 @@ contraction are separate, serial NetworkX operations. Needs a Gurobi license.
 import argparse
 import contextlib
 import csv
-import io
 import json
 import os
 import sys
@@ -67,10 +77,13 @@ SETTINGS = ('pieces4', 'fit')
 IBM_QUBITS = 156
 COLUMNS = ['instance', 'B', 'setting', 'pieces', 'max_piece_qubits', 'rule',
            'mode', 'budgets', 'flow', 'ratio', 'optimum', 'greedy', 'maxflow',
-           'time_sec', 'partition_sec']
+           'time_sec', 'partition_sec', 'interdicted_edges', 'allocation_status',
+           'surrogate_value', 'surrogate_lower_bound', 'allocation_curves',
+           'multiplier_history']
 
 
-def partition(setting, di_g, src, tgt, fit_qubits=IBM_QUBITS, seed=0):
+def partition(setting, di_g, src, tgt, fit_qubits=IBM_QUBITS, seed=0,
+              max_terminals=dc.DEFAULT_MAX_TERMINALS):
     """
     (pieces, largest piece QUBO) for a setting. Raises ValueError from
     partition_to_fit() when no partition fits `fit_qubits`.
@@ -78,35 +91,46 @@ def partition(setting, di_g, src, tgt, fit_qubits=IBM_QUBITS, seed=0):
     if setting == 'pieces4':
         pieces = dc.partition_graph(di_g, 4, seed=seed)
     elif setting == 'fit':
-        pieces, _ = dc.partition_to_fit(di_g, src, tgt, fit_qubits, seed=seed)
+        pieces, _ = dc.partition_to_fit(di_g, src, tgt, fit_qubits, seed=seed,
+                                        max_terminals=max_terminals)
     else:
         raise ValueError(f'unknown setting {setting!r}')
-    sizes = [dc.piece_qubo_size(dc.piece_subproblem(di_g, src, tgt, pieces, i))
+    sizes = [dc.piece_qubo_size(dc.piece_subproblem(di_g, src, tgt, pieces, i,
+                                                  max_terminals=max_terminals))
              for i in range(len(pieces))]
     return pieces, max(sizes)
 
 
-def case_rows(di_g, src, tgt, B, pieces, refine):
-    """(rule, mode, budgets, flow, seconds) for every variant of one case."""
+def case_rows(di_g, src, tgt, B, pieces, refine, *, rules=dc.SPLIT_STRATEGIES,
+              modes=dc.SOLVE_MODES, max_terminals=dc.DEFAULT_MAX_TERMINALS,
+              multiplier_iterations=100):
+    """Yield each completed variant with its actual cut and allocation diagnostics."""
     solve = dc.gurobi_piece_solver
-    rows = []
-    for rule in dc.SPLIT_STRATEGIES:
+    for rule in rules:
         start = time.perf_counter()
-        budgets = dc.split_budget(di_g, src, tgt, B, pieces, rule, solve)
+        allocation = {}
+        if rule == 'multiplier':
+            allocation = dc.common_multiplier_split(
+                di_g, src, tgt, B, pieces, solve, max_terminals=max_terminals,
+                max_iterations=multiplier_iterations)
+            budgets = allocation['budgets']
+        else:
+            budgets = dc.split_budget(di_g, src, tgt, B, pieces, rule, solve,
+                                       max_terminals=max_terminals)
         split_time = time.perf_counter() - start
-        for mode in dc.SOLVE_MODES:
+        for mode in modes:
             start = time.perf_counter()
-            _, flow = dc.solve_decomposed(di_g, src, tgt, pieces, budgets,
-                                          solve, mode)
-            rows.append((rule, mode, budgets, flow,
-                         split_time + time.perf_counter() - start))
+            cut, flow = dc.solve_decomposed(di_g, src, tgt, pieces, budgets,
+                                            solve, mode, max_terminals=max_terminals)
+            yield (rule, mode, budgets, flow, split_time + time.perf_counter() - start,
+                   cut, allocation)
         if rule == 'marginal' and refine:
             start = time.perf_counter()
-            refined, _, flow = dc.refine_split(di_g, src, tgt, pieces, budgets,
-                                               solve, mode='iterated')
-            rows.append(('marginal+refine', 'iterated', refined, flow,
-                         split_time + time.perf_counter() - start))
-    return rows
+            refined, cut, flow = dc.refine_split(di_g, src, tgt, pieces, budgets,
+                                                 solve, mode='iterated',
+                                                 max_terminals=max_terminals)
+            yield ('marginal+refine', 'iterated', refined, flow,
+                   split_time + time.perf_counter() - start, cut, {})
 
 
 def main(argv=None):
@@ -114,6 +138,11 @@ def main(argv=None):
     parser.add_argument('--cases', default=SLIDE_CSV,
                         help='CSV with instance, B, Opt_NIP, Greedy, maxflow')
     parser.add_argument('--settings', default=','.join(SETTINGS))
+    parser.add_argument('--rules', default=','.join(dc.SPLIT_STRATEGIES))
+    parser.add_argument('--modes', default=','.join(dc.SOLVE_MODES))
+    parser.add_argument('--max-terminals', type=int, default=dc.DEFAULT_MAX_TERMINALS,
+                        help='cap terminals in each exact contraction (0..12)')
+    parser.add_argument('--multiplier-iterations', type=int, default=100)
     parser.add_argument('--refine', action='store_true',
                         help='add refine_split() rows (4-piece setting)')
     parser.add_argument('--fit-qubits', type=int, default=IBM_QUBITS,
@@ -121,6 +150,16 @@ def main(argv=None):
     parser.add_argument('--out', required=True)
     args = parser.parse_args(argv)
     settings = args.settings.split(',')
+    rules, modes = args.rules.split(','), args.modes.split(',')
+    for label, selected, supported in [('settings', settings, SETTINGS),
+                                      ('rules', rules, dc.SPLIT_STRATEGIES),
+                                      ('modes', modes, dc.SOLVE_MODES)]:
+        if any(value not in supported for value in selected) or len(set(selected)) != len(selected):
+            parser.error(f'--{label} must select distinct values from {supported}')
+    if not 0 <= args.max_terminals <= dc.DEFAULT_MAX_TERMINALS:
+        parser.error(f'--max-terminals must be between 0 and {dc.DEFAULT_MAX_TERMINALS}')
+    if 'multiplier' in rules and args.multiplier_iterations < 1:
+        parser.error('--multiplier-iterations must be positive')
 
     commit = rb.repo_commit()
     cases = pd.read_csv(args.cases, comment='#')
@@ -133,6 +172,12 @@ def main(argv=None):
                      'partition seed 0\n')
         handle.write(f'# Gurobi Threads: {ni.DEFAULT_GUROBI_THREADS}; '
                      'fresh run, no resumed rows\n')
+        handle.write(f'# rules: {args.rules}; modes: {args.modes}; '
+                     f'max_terminals: {args.max_terminals}; '
+                     f'multiplier_iterations: {args.multiplier_iterations}\n')
+        handle.write('# multiplier bounds apply only to the separable allocation '
+                     'surrogate, not global NIP; time_sec includes all curve solves; '
+                     'actual combined cuts are scored on the original graph\n')
         writer = csv.DictWriter(handle, fieldnames=COLUMNS)
         writer.writeheader()
         handle.flush()
@@ -146,7 +191,8 @@ def main(argv=None):
                 start = time.perf_counter()
                 try:
                     pieces, largest = partition(setting, di_g, src, tgt,
-                                                args.fit_qubits)
+                                                args.fit_qubits,
+                                                max_terminals=args.max_terminals)
                 except ValueError as error:
                     for case in group.itertuples():
                         writer.writerow({
@@ -163,24 +209,36 @@ def main(argv=None):
                     print(f'{instance} B={case.B} {label}: solving pieces '
                           f'(Gurobi Threads={ni.DEFAULT_GUROBI_THREADS})',
                           flush=True)
-                    with contextlib.redirect_stdout(io.StringIO()):
-                        rows = case_rows(di_g, src, tgt, case.B, pieces,
-                                         args.refine and setting == 'pieces4')
                     reduction = case.maxflow - case.Opt_NIP
-                    for rule, mode, budgets, flow, seconds in rows:
-                        writer.writerow({
-                            'instance': instance, 'B': case.B,
-                            'setting': label, 'pieces': len(pieces),
-                            'max_piece_qubits': largest, 'rule': rule,
-                            'mode': mode, 'budgets': json.dumps(budgets),
-                            'flow': flow,
-                            'ratio': round((case.maxflow - flow) / reduction, 6),
-                            'optimum': case.Opt_NIP, 'greedy': case.Greedy,
-                            'maxflow': case.maxflow,
-                            'time_sec': round(seconds, 3),
-                            'partition_sec': round(partition_time, 3)})
-                    handle.flush()
-                    best = min(row[3] for row in rows)
+                    best = float('inf')
+                    # Consume the generator under the output redirect and flush
+                    # every completed variant before starting the next solve.
+                    with open(os.devnull, 'w') as quiet, contextlib.redirect_stdout(quiet):
+                        for rule, mode, budgets, flow, seconds, cut, allocation in case_rows(
+                                di_g, src, tgt, case.B, pieces,
+                                args.refine and setting == 'pieces4', rules=rules, modes=modes,
+                                max_terminals=args.max_terminals,
+                                multiplier_iterations=args.multiplier_iterations):
+                            writer.writerow({
+                                'instance': instance, 'B': case.B,
+                                'setting': label, 'pieces': len(pieces),
+                                'max_piece_qubits': largest, 'rule': rule,
+                                'mode': mode, 'budgets': json.dumps(budgets),
+                                'flow': flow,
+                                'ratio': round((case.maxflow - flow) / reduction, 6),
+                                'optimum': case.Opt_NIP, 'greedy': case.Greedy,
+                                'maxflow': case.maxflow,
+                                'time_sec': round(seconds, 3),
+                                'partition_sec': round(partition_time, 3),
+                                'interdicted_edges': json.dumps(cut),
+                                'allocation_status': allocation.get('status', ''),
+                                'surrogate_value': allocation.get('surrogate_value', ''),
+                                'surrogate_lower_bound': allocation.get('surrogate_lower_bound', ''),
+                                'allocation_curves': json.dumps(allocation['curves']) if allocation else '',
+                                'multiplier_history': json.dumps(allocation['history']) if allocation else '',
+                            })
+                            handle.flush()
+                            best = min(best, flow)
                     print(f'{instance} B={case.B} {label} ({len(pieces)} '
                           f'pieces, <= {largest} qubits): best {best}, '
                           f'optimum {case.Opt_NIP}, greedy {case.Greedy}',

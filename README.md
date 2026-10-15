@@ -86,20 +86,65 @@ exact optimum of larger ones, or `qubo_piece_solver(lambda)` for the
 annealer.
 
 A third budget rule, `marginal`, solves each piece for 0 to B cuts first and
-gives the budget to the pieces whose cuts save the most flow (the
-common-multiplier idea of #14, solved exactly by dynamic programming).
+gives the budget to the pieces whose cuts save the most flow, solving a
+separable allocation approximation exactly by dynamic programming.
 `refine_split()` then moves one unit of budget at a time between pieces while
 that lowers the combined flow. `--fit-qubits 156` picks the fewest pieces
-whose QUBOs all fit an IBM Heron device:
+whose QUBOs use at most 156 logical qubits. Device connectivity, embedding
+and transpiled circuit depth require separate checks:
 
 ```
 python decomposition.py testcases/50.planarflow --fit-qubits 156 --budget 6 --split marginal
 ```
 
+The `multiplier` rule implements #14's alternative: one shared allocation
+price, tuned by projected subgradient ascent. It measures the same curves
+`f_i(k)` as `marginal`, then each piece chooses a count minimizing
+`f_i(k) + lambda*k`. The allocation dual is
+`L(lambda) = sum_i min_k(f_i(k) + lambda*k) - lambda*B`, with `lambda >= 0`.
+The update uses count violation `sum_i k_i - B`, step
+`M / (G*sqrt(iteration))`, and projection onto `[0, M]`; `M` is the largest
+marginal flow drop and `G` bounds that count violation. Tied local minima
+choose the smaller count. A deterministic repair removes the least costly
+budget units or adds the most valuable ones until the available budget is
+assigned. The best repaired allocation and best dual bound are retained.
+
+```bash
+python decomposition.py testcases/tiny_a.flow --pieces 2 --budget 1 \
+    --split multiplier --multiplier-iterations 100
+```
+
+`common_multiplier_split()` returns budgets, measured curves, price history,
+the repaired surrogate value and its lower bound. Arithmetic for curve
+values and prices uses exact fractions of the supplied integer/binary-float
+inputs; exported bounds round outward. `optimal_surrogate` means that
+allocation gap closed exactly; `iteration_limit` preserves the incumbent
+and bound after the allowed updates. The history includes the exact price
+as a rational string for audits. Curves must be finite, nonnegative and
+nonincreasing. With a heuristic piece solver, bounds describe its measured
+curves only; the benchmark uses exact Gurobi piece solves.
+The piece oracle requests zero MIP gap and requires `OPTIMAL`, subject to
+solver numerical tolerances; an incomplete solve raises an error instead
+of supplying an allegedly exact curve.
+
+These are **allocation-surrogate bounds, not global NIP bounds**. Curves
+measure each piece in isolation, so their savings can overlap. Every combined
+cut is scored on the original graph. Nonconvex curves may also leave a
+positive duality gap within the surrogate: for `f=[10,9,0]`, `B=1`, the
+integer value is 9 but the best priced lower bound is 5. The method does
+not replace its result with the dynamic-programming answer or report that
+gap as closed. Changing the common allocation price also does not choose
+each piece QUBO's cardinality penalty.
+
 [run_decomposition_benchmark.py](run_decomposition_benchmark.py) measures
 every rule and mode against Gurobi's optimum on the slide instances and
 budgets, with each piece solved exactly, so the only error left is the
-decomposition's own.
+decomposition's own. `--rules` and `--modes` select a bounded subset;
+`--max-terminals` caps exact contraction work (0 to 12), and
+`--multiplier-iterations` caps price updates. The recorded allocation time
+includes measuring every curve, and partition time is separate. The CSV
+retains actual interdicted arcs, surrogate status/bounds/curves and the price
+history. Each completed variant is flushed before another solve starts.
 
 ## QAOA on simulators (Qiskit and CUDA-Q)
 
