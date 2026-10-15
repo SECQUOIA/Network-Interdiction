@@ -90,3 +90,20 @@ OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
 Results and their independent artifact audits are added after execution. This
 protocol does not imply that a challenging full instance becomes simulatable or
 embeddable merely because it has been partitioned.
+
+## Execution notes
+
+The first matched campaign completed all 108 dispatches and retains the largest
+planar fit pass as `outer_time_limit`: minorminer's internal timeout did not
+contain all native setup work. A supplementary fit run adds a 12-second process
+limit to each embedding attempt and retains all five whole/piece size records.
+The first attempt is not overwritten or relabeled as successful.
+
+The [source-edit note](../results/matched_scaling_execution.json) preserves a
+CSV/plot-only patch temporarily present during part of the first campaign.
+The recorded hashes are the committed source at campaign start; no solver,
+model, scoring, reference or resource-control function changed. In particular,
+the imported `run_benchmark.parse_case` was unchanged. The patch was restored
+before the last two cases and applied permanently only after the campaign.
+This is not claimed to be an immutable whole-tree execution. All reported
+results retain the original producing snapshot and this exception.

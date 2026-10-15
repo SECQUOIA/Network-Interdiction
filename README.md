@@ -308,8 +308,8 @@ was 0.498, 0.517 and 0.399 seconds; the pinned Benders runs took 0.111, 0.049
 and 0.075 seconds. The decomposition timers include all curve measurement
 work. These are single runs in separate processes with different execution
 orders and no dedicated warmup, so they do not support a statistical speedup
-claim. The cases are easy synthetic networks; full-cohort and real-network
-comparisons remain under #14/#15. None of these four-piece partitions fits
+claim. The cases are easy synthetic networks; the later
+[matched cohort](docs/matched_scaling.md) adds real networks and a hard case. None of these four-piece partitions fits
 156 logical qubits, and no physical embedding or hardware run is claimed.
 
 ## QAOA on simulators (Qiskit and CUDA-Q)
@@ -860,7 +860,8 @@ The existing `Gurobi_time_sec` remains solver-only for compatibility.
 and any auto-lambda calibration; do not treat this setup work as free when
 reporting the complete QUBO pipeline cost. These columns exclude graph-file
 loading, and the total solve times include their usual diagnostic output.
-The complete same-instance per-family comparison remains work under #15.
+The [matched cohort tables](docs/matched_scaling.md) compare software methods
+on the same real, legacy and hard instances; hardware columns stay empty.
 
 The saved [three-family sample](results/classical_baselines_sample.csv)
 runs these methods on the same three existing slide cases, using the
@@ -888,8 +889,8 @@ sweeps default. There is one run per case and no dedicated warmup; references
 run first in the same process. These easy cases also have exact LP bounds
 and optimal greedy solutions. They validate execution and saved-cut scoring,
 not hardness, statistical timing differences, scaling or a speedup.
-The CSV leaves hardware and other unrun methods empty. Decomposition and
-the remaining same-instance baselines are still needed for #15's full table.
+The CSV leaves hardware and other unrun methods empty. The later
+[matched cohort](docs/matched_scaling.md) adds the decomposition variants.
 
 A real run needs the licensed tools:
 

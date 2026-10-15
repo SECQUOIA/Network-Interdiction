@@ -49,6 +49,10 @@ BASELINES = {
     'Benders': 'Benders',
 }
 
+BASELINES.update({f'{rule}-{mode}': f'Decomp_{rule}_{mode}'
+                  for rule in ('mincut', 'local', 'marginal', 'multiplier')
+                  for mode in ('sequential', 'iterated')})
+
 # Plotting order, and the colour each series has always been drawn in.
 # Greedy takes the dark grey the original palette defined but never used;
 # Random-Greedy is amber, since the palette's other spare (#ff2d55) is too
@@ -64,6 +68,11 @@ SERIES_COLORS = {
     'Lagrangian-Feasible': '#16a085',
     'Benders': '#a65d2a',
 }
+
+SERIES_COLORS.update(dict(zip(
+    (f'{rule}-{mode}' for rule in ('mincut', 'local', 'marginal', 'multiplier')
+     for mode in ('sequential', 'iterated')),
+    ['#1f77b4', '#aec7e8', '#2ca02c', '#98df8a', '#9467bd', '#c5b0d5', '#8c564b', '#c49c94'])))
 
 BAR_WIDTH = 0.25
 GROUP_STEP = 1.5
@@ -121,7 +130,7 @@ def compute_series(frame, solvers, baselines=()):
     """
     # Column-wise, not row-wise: iterrows() would upcast these integer counts
     # to float via the row's mixed dtype and label the axis "16.0 (1.0)".
-    num_vars = frame['V'] + 3 * frame['E']
+    num_vars = frame['qubits'] if 'qubits' in frame else frame['V'] + 3 * frame['E']
     x_labels = [f'{v} ({b})' for v, b in zip(num_vars, frame['B'])]
 
     optimal_reduction = (frame['maxflow'] - frame['Opt_NIP']) / frame['maxflow']
@@ -137,8 +146,13 @@ def compute_series(frame, solvers, baselines=()):
         # cell rather than a 0 for a missing value, precisely because 0 is
         # taken here to mean something else.
         reduction = (frame['maxflow'] - frame[nip_col]) / frame['maxflow']
-        flow_reduction[label] = np.where(
-            frame[nip_col] == 0, 0.0, reduction / optimal_reduction)
+        # Explicit modern diagnostics distinguish a genuine zero-flow sample
+        # from the historical zero sentinel. Missing values remain missing.
+        feasible = f'{label}_raw_feasible_count'
+        legacy_zero = frame[nip_col] == 0
+        if feasible in frame:
+            legacy_zero &= frame[feasible].isna() | (frame[feasible] == 0)
+        flow_reduction[label] = np.where(legacy_zero, 0.0, reduction / optimal_reduction)
 
         greedy_reduction = ((frame['maxflow'] - frame[greedy_col])
                             / frame['maxflow'])

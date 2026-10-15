@@ -46,7 +46,8 @@ price history and surrogate gap. Neither gives a bound on global NIP flow.
 refine_split() repairs what treating the pieces' savings as additive gets
 wrong. run_decomposition_benchmark.py measures every rule against the exact
 optimum; the saved three-case comparison also uses the Benders sample.
-Full-cohort and real-network comparisons remain under #14/#15 and #1.
+run_matched_benchmark.py adds bounded real-network, legacy and hard-case
+comparisons, with resource refusals and actual per-piece offline fit measurements.
 
 Command line
 ------------

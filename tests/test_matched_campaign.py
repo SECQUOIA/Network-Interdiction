@@ -39,7 +39,7 @@ def test_hard_case_refused_before_sampler_or_reference_dispatch(method, monkeypa
 
 def test_fit_compiles_actual_restricted_pieces_and_schema(monkeypatch):
     import profile_embedding
-    monkeypatch.setattr(profile_embedding,'embedding_attempt',lambda source,target,**kw:
+    monkeypatch.setattr(matched,'hard_embedding_attempt',lambda source,target,**kw:
                         {'status':'not_found_within_budget','logical_variables':len(source)})
     g,s,t,allowed,_=ci.covering(4,1,0)
     result=matched.fit(g,s,t,3,set(allowed))
@@ -49,3 +49,26 @@ def test_fit_compiles_actual_restricted_pieces_and_schema(monkeypatch):
     assert result['rows'][0]['allowed_arcs']==6
     assert sum(row['allowed_arcs'] for row in result['rows'][1:])==6
     assert all(row['qci_schema']['status']=='accepted_offline' for row in result['rows'])
+
+
+def test_embedding_outer_limit_contains_native_overrun(monkeypatch):
+    import time
+    import networkx as nx
+    def slow(connection, source, target):
+        time.sleep(10)
+    monkeypatch.setattr(matched,'_embedding_child',slow)
+    start=time.perf_counter()
+    result=matched.hard_embedding_attempt(nx.path_graph(3),nx.path_graph(4),seconds=.05)
+    assert result['status']=='embedding_outer_time_limit'
+    assert time.perf_counter()-start<2
+    assert result['logical_variables']==3
+
+
+def test_actual_embedding_process_returns_an_auditable_mapping():
+    import networkx as nx
+    from profile_embedding import audit_embedding
+    source,target=nx.path_graph(3),nx.path_graph(5)
+    result=matched.hard_embedding_attempt(source,target)
+    assert result['status']=='embedded'
+    check=audit_embedding(source,target,{r['variable']:r['chain'] for r in result['embedding']})
+    assert check['physical_qubits']==result['physical_qubits']

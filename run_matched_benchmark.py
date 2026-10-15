@@ -72,12 +72,56 @@ def provenance():
                                     ['OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS']})
 
 
+def _embedding_child(connection, source, target):
+    from profile_embedding import embedding_attempt
+    try:
+        connection.send(embedding_attempt(source, target, seed=0, timeout=3))
+    except Exception as error:
+        connection.send(dict(status='embedding_failed', error=f'{type(error).__name__}: {error}'))
+    finally:
+        connection.close()
+
+
+def hard_embedding_attempt(source, target, *, seconds=12):
+    """Contain minorminer setup, which can exceed its cooperative timeout.
+
+    This campaign already requires POSIX resource limits. Forking a single
+    worker avoids serializing a dense interaction graph before the deadline.
+    The pipe is drained before join, including large successful certificates.
+    """
+    import multiprocessing
+    from profile_embedding import graph_digest
+    if not 0 < seconds <= 30:
+        raise ValueError('embedding outer limit must be in (0,30]')
+    context=multiprocessing.get_context('fork')
+    reader,writer=context.Pipe(duplex=False)
+    process=context.Process(target=_embedding_child,args=(writer,source,target))
+    start=time.perf_counter()
+    process.start();writer.close()
+    try:
+        if reader.poll(seconds):
+            try:
+                result=reader.recv()
+            except EOFError:
+                result=dict(status='embedding_worker_failed')
+        else:
+            result=dict(status='embedding_outer_time_limit')
+    finally:
+        if process.is_alive():
+            process.terminate()
+        process.join();reader.close()
+    result.update(process_wall_sec=time.perf_counter()-start,outer_seconds=seconds,
+                  logical_variables=len(source),logical_interactions=source.number_of_edges(),
+                  source_graph_sha256=graph_digest(source),target_graph_sha256=graph_digest(target))
+    return result
+
+
 def fit(graph, source, sink, budget, allowed):
     """Necessary logical guards plus actual ideal-P16 embedding attempts."""
     import bounded_benchmarks as bb
     import decomposition as dc
     from certified_penalties import certified_squared_qubo
-    from profile_embedding import topology, interaction_graph, embedding_attempt
+    from profile_embedding import topology, interaction_graph
     from solve_qubo_via_qci import prepare_request
     start = time.perf_counter()
     pieces = dc.partition_graph(graph, min(4, len(graph)), seed=0)
@@ -101,7 +145,7 @@ def fit(graph, source, sink, budget, allowed):
             row['qci_schema'] = {'status': 'accepted_offline', 'optical_levels': sum(request['job_params']['num_levels'])}
         except ValueError as error:
             row['qci_schema'] = {'status': 'refused', 'reason': str(error)}
-        row['embedding'] = embedding_attempt(interaction_graph(bqm), target, seed=0, timeout=3)
+        row['embedding'] = hard_embedding_attempt(interaction_graph(bqm), target)
         rows.append(row)
     return dict(status='completed', runtime_sec=time.perf_counter()-start,
                 pieces=[sorted(p) for p in pieces], budgets=budgets, rows=rows,
@@ -153,6 +197,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--worker', nargs=4, metavar=('MANIFEST','NAME','B','METHOD'))
+    parser.add_argument('--fit-only', choices=[name for name,_ in SELECTION],
+                        help='separate retained fit attempt for one previously selected case')
     args = parser.parse_args(argv)
     if args.worker:
         # Hard process memory cap; native calls also remain subject to parent timeout.
@@ -163,13 +209,15 @@ def main(argv=None):
             json.dump(result, handle, allow_nan=False)
         return
     refs = cases_and_references()  # All validation precedes optimization/output creation.
+    selection = [key for key in SELECTION if not args.fit_only or key[0] == args.fit_only]
+    methods = ['fit'] if args.fit_only else METHODS
     rows = []
     artifact = dict(schema=1, **provenance(),
-                    settings=dict(selection=SELECTION, methods=METHODS, seconds_per_method=20,
+                    settings=dict(selection=selection, methods=methods, seconds_per_method=20,
                                   max_flow_calls=5000, max_child_calls=128, child_seconds=5,
                                   parts=4, max_terminals=4, max_rounds=1, seed=0,
                                   reads=200, sweeps=1000, outer_seconds=120, memory_bytes=8*1024**3,
-                                  embedding_seconds=3, embedding_target='ideal P16', repetitions=1),
+                                  embedding_seconds=3, embedding_outer_seconds=12, embedding_target='ideal P16', repetitions=1),
                     attempts=[dict(attempt=1,status='running',completed_methods=0)], cases=rows)
     with args.out.open('x') as handle:
         def save():
@@ -177,14 +225,14 @@ def main(argv=None):
             handle.write('\n'); handle.truncate(); handle.flush()
         save()
         try:
-            for name,budget in SELECTION:
+            for name,budget in selection:
                 ref = refs[name,budget]
                 row = dict(name=name,B=budget,manifest=ref['manifest'],
                            reference=ref['reference'],reference_sha256=ref['reference_sha256'],
                            reference_source_commit=ref['reference_source_commit'],
                            sha256=ref['case']['sha256'], methods={})
                 rows.append(row); save()
-                for method in METHODS:
+                for method in methods:
                     print(name, budget, method, flush=True)
                     row['methods'][method] = dict(status='dispatched')
                     save()

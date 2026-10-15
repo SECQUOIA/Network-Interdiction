@@ -125,8 +125,9 @@ Compare surviving flow, shot optimality, repair contribution, circuit depth,
 and total work instead. Timing includes building/training/shots, with stages
 separately retained; the first quantum method also pays lazy backend import
 costs. A single seeded run is a feasibility check, not statistical evidence
-of a speed or quality advantage. Hard-instance and larger-scale comparisons
-remain a separate part of the software series; no hardware is run here.
+of a speed or quality advantage. The later [scaling study](matched_scaling.md)
+adds larger simulator cases and records the hard case's resource refusal;
+no hardware is run here.
 
 ### Saved three-case run
 

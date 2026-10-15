@@ -239,6 +239,13 @@ CSV_COLUMNS = CSV_COLUMNS[:-1] + list(BASELINE_COLUMNS.values()) + \
     TIME_COLUMNS + BOUND_COLUMNS + SAMPLE_COLUMNS + QCI_METADATA_COLUMNS + \
     ['QAOA_metadata', TRAJECTORY_COLUMN]
 
+# Optional columns used by the bounded matched-cohort exporter.
+# They are not additional passes in this unbounded per-case CLI.
+DECOMPOSITION_COLUMNS = {f'{rule}_{mode}': f'Decomp_{rule}_{mode}'
+                         for rule in ('mincut', 'local', 'marginal', 'multiplier')
+                         for mode in ('sequential', 'iterated')}
+CSV_COLUMNS += list(DECOMPOSITION_COLUMNS.values())
+
 DEFAULT_MAX_EXACT_VARS = 24
 
 # Matches the 20 lowest-energy samples qubo_verify_parameters() decodes, so
