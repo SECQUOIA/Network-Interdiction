@@ -31,11 +31,18 @@ Greedy          surviving flow after interdicting B arcs greedily from an
 Random_Greedy   best surviving flow over 20 random interdictions (each arc
                 cut independently with probability B/E), each repaired to
                 exactly B arcs by the same greedy pass
-*_time_sec      wall time of each method on this row, in seconds, excluding
-                model/QUBO construction: Gurobi_time_sec is Gurobi's Runtime
-                for a dedicated solve (--gurobi-threads threads, default 8);
-                SA_time_sec is the sampler call and SA_repair_time_sec the
-                decode + repair of its 20 best samples
+Gurobi_time_sec solver-only Runtime for a dedicated solve
+                (--gurobi-threads threads, default 8)
+SA_time_sec     sampler call only; SA_repair_time_sec is the decode,
+                evaluation and repair of its 20 best samples
+Gurobi_total_time_sec, SA_total_time_sec
+                method construction, solve and scoring, in seconds
+Reference_time_sec exact references, QUBO verification and any auto-lambda
+                calibration, recorded separately from the method totals
+Greedy_time_sec, Random_Greedy_time_sec, Lagrangian_time_sec, Benders_time_sec
+                complete baseline pass including construction and scoring;
+                LP_time_sec includes construction/solve/certification and
+                LP_repair_time_sec separately includes rounding/repair/scoring
 Gurobi_trajectory  JSON list of [seconds, surviving flow] for every incumbent
                 Gurobi found in that dedicated solve (MIPSOL callback); only
                 with --exact gurobi
