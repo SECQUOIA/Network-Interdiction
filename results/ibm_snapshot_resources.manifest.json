@@ -1,0 +1,11 @@
+{
+  "source_commit": "2a608dec788bc9ec3f2422fde061f1b47906eab3",
+  "report_sha256": "b9f05e9971cc9f663af066ca70aef708dbf1c3921bbe7d94fb41643dca207e82",
+  "attempts": 1,
+  "cases_per_snapshot": 14,
+  "snapshots": 2,
+  "timeout_sec": 300,
+  "virtual_memory_limit_gib": 8,
+  "numerical_threads": 1,
+  "protocol": "One offline p=1 transpilation per case/snapshot; no dedicated warmup. First call includes lazy imports. Every emitted instruction checked against target. No service or circuit execution. Fit only within this cohort and these bundled snapshots."
+}

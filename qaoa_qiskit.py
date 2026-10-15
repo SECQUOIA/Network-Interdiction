@@ -1,9 +1,10 @@
 """
-Penalty-QAOA for the NIP QUBO in Qiskit (issues #3, #16; the Aer step of #17).
+QAOA for the NIP QUBO in Qiskit (issues #3, #16; the Aer step of #17).
 
 The cost Hamiltonian is the Ising form of nip_to_qubo()'s QUBO, built by
 qaoa_common.build_problem(), as a SparsePauliOp; the circuit is Qiskit's
-qaoa_ansatz() of it with the standard X mixer. Training uses the exact
+qaoa_ansatz() of it with the standard X mixer by default. An opt-in
+FixedWeightMixer preserves a selected register's budget. Training uses the exact
 expectation values of Aer's EstimatorV2, and the trained circuit is scored
 from its Aer statevector and from SamplerV2 shots. Conventions (qubit order,
 angle order [beta..., gamma...], Hamiltonian scaling) are in qaoa_common.
@@ -54,8 +55,8 @@ def cost_operator(problem):
 class QiskitBackend:
     """
     The QAOA circuit for one problem and depth, simulated with Aer's V2
-    primitives (an IBM device would need runtime primitives and the circuit
-    transpiled to its ISA, #17).
+    primitives. qaoa_ibm.py supplies fixed-angle Runtime sampling after routing
+    the same cost circuit to a device ISA (#17).
 
     `method` is 'statevector' (exact) or 'mps' (matrix product state).
     `max_bond_dimension` caps the MPS bond dimension: None keeps it exact,
@@ -69,11 +70,15 @@ class QiskitBackend:
     [0, pi] and replaces the X mixer by sin(angle) X + cos(angle) Z on
     that qubit. regularized_warm_start() supplies these angles. At pi/2
     this reduces to the standard initial state and mixer.
+
+    `fixed_weight` accepts qaoa_xy.FixedWeightMixer: its register uses a
+    weight-preserving XY ring and a feasible initial state; all other qubits
+    use X mixing. It cannot be combined with the product warm start.
     """
     name = 'qiskit'
 
     def __init__(self, problem, reps, method='statevector',
-                 max_bond_dimension=None, warm_start_angles=None):
+                 max_bond_dimension=None, warm_start_angles=None, fixed_weight=None):
         if method not in METHODS:
             raise ValueError(f'unknown method {method!r}, expected one of '
                              f'{tuple(METHODS)}')
@@ -89,7 +94,12 @@ class QiskitBackend:
         # Exact probabilities need the statevector.
         self.exact_probabilities = method == 'statevector'
         self.operator = cost_operator(problem)
-        if warm_start_angles is None:
+        if fixed_weight is not None:
+            if warm_start_angles is not None:
+                raise ValueError('fixed-weight mixing cannot use product warm-start angles')
+            from qaoa_xy import fixed_weight_ansatz
+            ansatz = fixed_weight_ansatz(problem, reps, fixed_weight)
+        elif warm_start_angles is None:
             ansatz = qaoa_ansatz(self.operator, reps=reps)
         else:
             angles = np.asarray(warm_start_angles, dtype=float)

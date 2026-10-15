@@ -28,6 +28,9 @@ You'll also need:
   the `dwave-ocean-sdk`, or set the `DWAVE_API_TOKEN` env var. The `sa`
   (simulated annealing, `dwave-neal`) path needs no credentials and is what
   `main()` uses by default.
+- **A QCI token and separate SDK environment**, only for the optional `qci`
+  pass. Set `QCI_TOKEN` in your environment and `QCI_PYTHON` to that
+  environment's Python; see [Dirac-3 setup](#qci-dirac-3-bqm-backend) below.
 - **Julia is not required.** `solve_nip_qubo` and
   `solve_nip_qubo_repair_once_end` call out to a `nip_cubic.jl` script that
   isn't included in this repo, so those two functions are currently
@@ -49,6 +52,72 @@ python network_interdiction.py
 `main()` picks a test instance from [testcases/](testcases/), solves it
 exactly via Gurobi, then via the QUBO formulation + simulated annealing, and
 prints a comparison.
+
+## QCI Dirac-3 BQM backend
+
+[solve_qubo_via_qci.py](solve_qubo_via_qci.py) restores the missing QCI path
+against the same `dimod.BinaryQuadraticModel` used by SA/QA. The current
+[qci-client SDK](https://quantumcomputinginc.com/learn/module/introduction-to-dirac-3/qci-client-software-package/v5.0.3/modules/qci-client/optimization/client)
+requires `networkx<3`, while this project requires `networkx>=3.2`. Keep the
+SDK in a separate environment rather than overriding either constraint:
+
+```bash
+uv venv .venv-qci --python 3.12
+uv pip install --python .venv-qci/bin/python -r requirements-qci.txt
+export QCI_PYTHON="$PWD/.venv-qci/bin/python"
+```
+
+Set `QCI_TOKEN` using your usual credential management. The SDK reads it
+from the environment; it is never placed in command arguments, request files,
+CSV provenance or diagnostic messages. `QCI_API_URL` optionally overrides
+the SDK's default service URL. The core environment sends coefficient JSON
+to [qci_worker.py](qci_worker.py) through stdin, then receives samples and a
+job receipt through stdout. The SDK is pinned to 5.0.3 and tested in its own
+CI job; it is not a core dependency.
+
+The [Dirac-3 integer protocol](https://quantumcomputinginc.com/learn/module/introduction-to-dirac-3/dirac-3-developer-beginner-guide)
+with `num_levels=[2,...,2]` represents binary variables. Each BQM linear or
+quadratic coefficient appears once in the one-based polynomial encoding;
+the constant offset stays local. Returned samples must be binary, correctly
+sized, and have positive occurrence counts summing to the requested sample
+count. Energies are recomputed using the original BQM, including its offset.
+No continuous relaxation, rounding of fractional samples or classical descent
+is hidden in this backend.
+
+This command **submits a hardware job** (it is an example, not a saved run):
+
+```bash
+python run_benchmark.py --exact brute --solvers qci \
+    --case testcases/tiny_a.flow:1:auto --qci-samples 20 \
+    --qci-relaxation-schedule 1 --qci-timeout 300 --out results/qci.csv
+```
+
+The `QCI_NIP`, `QCI_NIP_Greedy`, `QCI_QUBO` and `QCI_*` sample diagnostics
+use the same exact reference, best-at-most-20-record selection and repair
+as SA. All QCI columns stay empty when the pass is unselected or the strict
+lambda window is empty. Measured zeros remain zero. QCI columns are available
+in the CSV; the existing plotting script still displays its SA/QA series.
+`QCI_time_sec` includes worker startup, authentication, upload, queue and result
+retrieval; `QCI_repair_time_sec` covers diagnostics and repair. Both exclude
+building the BQM and the exact-reference calculation. `QCI_device_usage_sec`
+is the vendor's rounded **billable** usage, not precise QPU execution time,
+and remains empty if the service omits it. Job ID, device and SDK version
+are retained. QCI does not expose a reproducibility seed here.
+
+The worker submits once with no automatic job resubmission. On timeout it stops waiting,
+without cancelling the remote job, and reports its ID if the submission receipt
+arrived. A failure before that receipt can have an unknown submission outcome;
+inspect the QCI account before submitting again. HTTP request attempts use a 30-second
+timeout and `--qci-timeout` bounds the entire worker, including startup/upload.
+The local limit of 474 binary variables follows the cloud guide's 949-level
+limit, and samples are limited to 1..100. These are input guards, not measured
+hardware capacity. Empty/constant objectives and SPIN BQMs are rejected locally.
+
+Validation uses exhaustive binary energy comparisons, offline benchmark scoring,
+and the actual SDK serializer/job builder with HTTP forbidden. No QCI job was
+submitted in this work. Largest successfully solved hardware instance and QPU
+execution-time measurements remain unmeasured; simulator integration and device
+resource studies continue under #17/#4/#14.
 
 ## Decomposition into smaller QUBOs
 
@@ -177,6 +246,147 @@ comparisons remain under #14/#15. None of these four-piece partitions fits
 156 logical qubits, and no physical embedding or hardware run is claimed.
 
 ## QAOA on simulators (Qiskit and CUDA-Q)
+
+The unified CSV runner also accepts `--solvers qaoa` (or `sa,qaoa`) through
+[solve_qubo_via_qaoa.py](solve_qubo_via_qaoa.py). It uses the existing Qiskit
+Aer statevector backend and COBYLA optimizer, then sends its raw samples through
+the same reference scoring, <=20-lowest-energy-record selection and greedy
+repair as the other solvers. This adapter does not repeat exact NIP solves
+inside the sampler. Install the existing optional `requirements-qaoa.txt`
+alongside core requirements; Qiskit/Aer remain optional for SA/QA/QCI.
+
+```bash
+python run_benchmark.py --exact brute --solvers sa,qaoa --baselines greedy \
+    --case testcases/tiny_a.flow:1:auto --seed 0 \
+    --qaoa-reps 1 --qaoa-shots 2500 --qaoa-maxiter 20 \
+    --qaoa-max-qubits 24 --out results/sa_qaoa.csv
+```
+
+`QAOA_NIP`, `QAOA_NIP_Greedy`, `QAOA_QUBO` and the raw/pre-greedy diagnostics
+follow the same column conventions as SA. QAOA records are distinct observed
+bitstrings with their shot counts; feasibility counts remain unweighted record
+counts, not success probabilities. No classical descent precedes repair.
+`QAOA_time_sec` includes imports, Hamiltonian/circuit construction, angle training
+and final shots. BQM construction and the shared exact reference are excluded;
+`QAOA_repair_time_sec` measures scoring/repair separately. `QAOA_metadata` retains
+angles in beta-then-gamma order, Hamiltonian scale, variable order, versions,
+seed, shots, evaluation count, resource limits and the build/train/sample wall
+times. Circuit depth and two-qubit gate count describe the existing logical
+basis circuit with unconstrained connectivity, before measurement or device
+routing. They are not hardware depth or QPU timing.
+
+The sampler uses one linear-ramp start, `p=1`, 2500 shots and at most 100
+COBYLA evaluations by default. `--qaoa-maxiter` must be at least `2*p+2`,
+COBYLA's minimum; invalid controls and QUBOs beyond the selected limit fail
+before exact-reference work or simulator construction. This benchmark adapter
+caps statevectors at 24 qubits. The standalone modules below still support
+larger approximate MPS runs. An unselected pass or an empty strict lambda
+window leaves all QAOA columns empty. The existing plot still displays SA/QA
+series; QAOA comparison data is available in the CSV. No IBM account or hardware
+submission is involved in this default Aer path. The optional IBM path below
+uses the same result columns and reference scoring.
+
+The [saved shared-run sample](results/shared_sa_qaoa.csv) and
+[manifest](results/shared_sa_qaoa.json) use seed 0, 2500 SA reads, 2500 Aer
+shots, `p=1` and 20 COBYLA evaluations on each of two tiny instances:
+
+| Case (budget) | Qubits | Exact / greedy / SA / QAOA flow | SA feasible records | QAOA feasible records | SA sampler seconds | QAOA adapter seconds |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `tiny_a` (1) | 14 | 5 | 20/20 | 16/20 | 0.512 | 0.544 |
+| `tiny_b` (2) | 21 | 5 | 20/20 | 16/20 | 0.649 | 14.544 |
+
+Both samplers reach the exact QUBO energy and optimal surviving flow before
+and after repair. The feasibility fractions count selected records only;
+SA can have repeated records while QAOA aggregates identical shot bitstrings.
+These are easy cases that greedy also solves, and single timings have different
+warmup histories: Qiskit imports are charged to the first QAOA call. They do not
+establish a speedup or an advantage. The 21-qubit case is the largest in this
+bounded sample, not a demonstrated simulator limit. All selected cuts are
+independently audited, and source/input hashes are pinned in the manifest.
+
+### IBM Runtime and offline routing
+
+[qaoa_ibm.py](qaoa_ibm.py) implements fixed-angle sampling through the
+[current client-side IBM Runtime Sampler](https://quantum.cloud.ibm.com/docs/en/api/qiskit-ibm-runtime/executor-sampler-sampler).
+Install `requirements-ibm.txt` alongside core and QAOA requirements. The tested
+Runtime 0.50 API is bounded to its minor version; IBM dependencies stay optional.
+The adapter takes a BQM, an explicit backend and `2*p` finite angles in the same
+normalized-Hamiltonian beta-then-gamma order as Aer. Angles can be trained locally
+or transferred; this path performs no hardware optimization loop. Measurements
+are attached before routing so returned classical bit `i` still names BQM
+variable `i`, even after placement and swaps. Energies are recomputed from the
+original BQM, including its offset.
+
+For a future hardware run, configure a saved account using IBM's
+[account setup instructions](https://quantum.cloud.ibm.com/docs/en/guides/save-credentials),
+then select a device and supplied angles explicitly:
+
+```bash
+python run_benchmark.py --exact brute --solvers qaoa --baselines greedy \
+    --case testcases/tiny_a.flow:1:7.5 --qaoa-engine ibm \
+    --ibm-backend YOUR_DEVICE --ibm-theta 0.441105168324448 -0.6094963505585733 \
+    --qaoa-reps 1 --qaoa-shots 2500 --qaoa-max-qubits 24 \
+    --ibm-max-depth 10000 --ibm-timeout 300 --ibm-max-execution-time 300 \
+    --out results/ibm.csv
+```
+
+**That command submits a hardware job.** The example angles are the saved
+`tiny_a`, lambda 7.5 Aer angles; they are not asserted to work well on a device.
+`--qaoa-maxiter` applies only to Aer. `--seed` seeds the IBM transpiler, not QPU
+measurements. Runtime jobs disable gate/measurement twirling and dynamical
+decoupling for a direct sampled-circuit comparison. `QAOA_time_sec` includes
+transpilation, client preparation, submission, queue and results; it excludes
+exact references/BQM construction and does not include earlier angle training.
+`QAOA_metadata` retains the job ID, execution mode, angles, target width,
+active physical qubits, layout, routed depth/gate counts, stage times and SDK
+versions. Service usage fields retain their original names and status: they
+measure service accounting, not bare circuit duration. Missing usage stays
+unmeasured; local SDK placeholder zeros are not reported as QPU timings.
+
+Width is checked before reference solves, routed depth before submission, and
+local simulation is capped at 24 logical **and active routed** qubits. The result
+deadline is cooperative: an individual SDK/network call can overrun it. A timeout
+or malformed result reports the known job ID without cancelling or resubmitting;
+inspect that job before retrying. The separate service execution cap excludes
+queue time. No live account or hardware was used to validate this implementation.
+Tests use actual SDK [local mode](https://quantum.cloud.ibm.com/docs/en/guides/local-testing-mode)
+with Aer and a bundled fake backend, while forbidding HTTP requests.
+
+[profile_ibm_resources.py](profile_ibm_resources.py) only builds and routes
+circuits against bundled Sherbrooke (127 qubits) and Torino (133 qubits)
+snapshots. It never creates a service or samples a circuit:
+
+```bash
+python profile_ibm_resources.py --case testcases/tiny_a.flow:1:10 \
+    --case testcases/50.planarflow:5:10 --seed 0 --out results/ibm_fit.json
+```
+
+Each row retains input and snapshot hashes, controls, timing and either a routed
+resource count or an explicit width refusal. Every routed instruction is checked
+against the target, including coupling direction. These historical snapshots
+establish offline routing fit for the supplied cohort, not present-day device
+availability, noise tolerance or successful optimization. QPU and execution times
+remain unmeasured. Run under an outer wall-time/memory limit for larger studies.
+
+The [saved routing study](results/ibm_snapshot_resources.json) and
+[run manifest](results/ibm_snapshot_resources.manifest.json) cover all four tiny
+cases, nine tracked medium cases, and `50.planarflow` on both snapshots. At
+`p=1`, lambda 10, seed 0 and optimization level 1, 11 of 14 cases route on each:
+
+| Snapshot | Largest fitted case in this cohort | Logical / active physical qubits | Routed depth | Two-qubit gates | Transpilation seconds |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Sherbrooke, 127 qubits | `planar_13_s0`, budget 3 | 116 / 116 | 781 | 1677 | 0.092 |
+| Torino, 133 qubits | `planar_13_s0`, budget 3 | 116 / 116 | 912 | 1620 | 0.079 |
+
+Both reject the 142-variable k-NN and 149-variable ER cases, and the
+912-variable `50.planarflow` QUBO, before transpilation. Thus this formulation of
+the 50-node case cannot fit either snapshot without decomposition or a different
+encoding. The chosen penalties and fixed angles define a routing experiment;
+they are not a certified penalty window or optimized solution. These are single
+compilations in case order, with first-call imports included and no warmup, so
+timings are observations rather than a compiler speed comparison. The study
+finished within its 300-second/8-GiB bound; no circuit was executed.
+
 
 The same QUBO the annealer samples can be solved with a penalty-QAOA, written
 twice: once in Qiskit ([qaoa_qiskit.py](qaoa_qiskit.py), Aer simulators) and
@@ -387,6 +597,33 @@ writes `sample_results_sa_flow_reduction.pdf` and
 `QA_*` columns are empty, and a solver whose columns are empty is skipped
 rather than drawn as empty bars.
 
+New benchmark CSVs record `SA_raw_feasible_count` and
+`QA_raw_feasible_count`: the number of budget-feasible records among the
+20 lowest-energy sampler records, or all records when fewer are returned.
+`SA_raw_samples_examined` and `QA_raw_samples_examined` give the denominator.
+Feasible means the decoded interdiction uses **at most B arcs**; this does
+not assert feasibility of the QUBO's dual variables. A measured count of
+zero is written as `0`; an unrun pass or an empty strict lambda window leaves
+the diagnostics empty. A sampler returning no records raises a clear error.
+
+Counts use **SampleSet records**, matching the best-20 selection used by
+the repair, rather than weighting by `num_occurrences` or deduplicating
+bitstrings. `SA_raw_samples` / `QA_raw_samples` retain JSON records with
+rank, energy, occurrence count, interdicted arcs, surviving max flow and
+budget feasibility. This lets the count and each cut's flow be audited.
+Tied energies retain the sampler's record order.
+
+For QA, “raw” means the logical samples returned by `EmbeddingComposite`
+after unembedding and its chain-break handling, **before** the adapter's
+classical steepest descent. The adapter continues to apply that descent
+before the existing flow/energy and greedy-repair metrics. Therefore the
+`QA_pre_greedy_feasible_count`, `QA_pre_greedy_samples_examined` and
+`QA_pre_greedy_samples` columns separately describe the actual repair input
+pool, which can differ from raw QPU output. The equivalent `SA_pre_greedy_*`
+columns equal the raw SA diagnostics because SA has no descent stage.
+The legacy `QA_NIP(advantage1)` and `QA_QUBO(advantage1)` columns still measure
+the post-descent pool; they must not be relabeled as raw QPU measurements.
+
 [results/slide_instances_sa.csv](results/slide_instances_sa.csv) is the
 same comparison on the nine instances behind the D-Wave slides (the original
 D-Wave results were not stored), with Gurobi's optimum, simulated annealing,
@@ -401,6 +638,28 @@ slide values and the penalty windows; the plotting helpers it calls live in
 [utils.py](utils.py) and its figures are saved to
 [figures/](figures/). It reads only the committed CSV, so it needs pandas and
 matplotlib but no Gurobi license or D-Wave token (one optional cell uses Gurobi).
+Those historical CSVs predate the count columns and have no retained sample
+records from which to recover them. They remain unchanged. The original QA
+CSVs are still missing under #18; adding this instrumentation does not recover
+those runs, and no hardware rerun was performed.
+
+[results/raw_feasibility_sa.csv](results/raw_feasibility_sa.csv) is a fresh,
+single-seed SA sample on three of those existing cases, with the selected
+records retained. Its [manifest](results/raw_feasibility_sa.json) pins the
+producing source, input hashes, versions, command and resource limits.
+
+| Instance (budget) | Raw budget-feasible / examined | Best feasible raw flow | Flow after repair |
+| --- | ---: | ---: | ---: |
+| `50.planarflow` (5) | 20 / 20 | 311 | 311 |
+| `50_0.15.erdosflow` (5) | 20 / 20 | 393 | 393 |
+| `50_5.2dnnflow` (4) | 0 / 20 | unavailable | 326 |
+
+The last case illustrates why a count is useful: none of the selected raw
+records respects the budget, even though repair produces a feasible result.
+These three single runs validate the instrumentation; they do not establish
+a size trend or reproduce the historical D-Wave experiments. All QA columns
+remain empty. Audits independently recompute all 60 saved cuts' flows and
+budget-feasibility flags.
 
 ### Regenerating the results CSV
 
@@ -601,6 +860,7 @@ See [the challenge cohort](testcases/challenge/README.md) for road, contact, pow
 and internal-arc covering inputs, and [the matched MILP/Benders screen](docs/challenge_profile.md)
 for bounded runs, gap trajectories, and explicit hard-set criteria. Third-party
 data retain the terms documented with each source.
+
 ### Certified squared penalties and Lean proofs
 
 The linear model remains the default. `certified_squared_qubo()` in
@@ -612,3 +872,13 @@ sufficient encoding. The [derivation and machine-checked Lean project](proofs/RE
 cover dual repair, the strict linear window and exposed-support characterization,
 and simultaneous squared-budget/dual separation. The helper validates the
 integer arithmetic range; arbitrary hand-chosen coefficients carry no certificate.
+
+### Budget-preserving XY mixer
+
+The Aer backend also supports a fixed-Hamming-weight XY mixer on the x
+register, with either a feasible basis state or a bounded dense Dicke start.
+The other variables keep X mixing and a cut-link penalty. See the
+[formulation, API, resource guards and comparison protocol](docs/qaoa_xy.md).
+`run_xy_comparison.py` compares it with penalty QAOA and SA using the same
+original MILP references and shot/repair scorer. This is a simulator feature;
+IBM Runtime remains on the existing penalty ansatz.
