@@ -26,6 +26,15 @@ SA_NIP_Greedy   same, after improve_dwave_solution() repairs each sample to
                 exactly B interdicted edges
 SA_QUBO         lowest QUBO energy the annealer reached
 QA_*            the same three columns for the D-Wave QPU path
+SA_raw_feasible_count, QA_raw_feasible_count
+                budget-feasible records among <=20 lowest-energy raw samples;
+                *_raw_samples_examined is the actual denominator
+SA_raw_samples, QA_raw_samples
+                JSON records with energies, occurrence counts, interdicted
+                arcs, actual surviving flows and budget-feasibility flags
+*_pre_greedy_*  corresponding diagnostics for the greedy-repair input pool;
+                for QA this is after classical steepest descent, so it can
+                differ from raw; SA has no descent stage
 Greedy          surviving flow after interdicting B arcs greedily from an
                 empty interdiction, one highest-impact arc at a time
 Random_Greedy   best surviving flow over 20 random interdictions (each arc
@@ -159,9 +168,14 @@ BASELINE_COLUMNS = {
 TIME_COLUMNS = ['Gurobi_time_sec', 'SA_time_sec', 'SA_repair_time_sec',
                 'Greedy_time_sec', 'Random_Greedy_time_sec']
 TRAJECTORY_COLUMN = 'Gurobi_trajectory'
+SAMPLE_FIELDS = ['raw_feasible_count', 'raw_samples_examined', 'raw_samples',
+                 'pre_greedy_feasible_count', 'pre_greedy_samples_examined',
+                 'pre_greedy_samples']
+SAMPLE_COLUMNS = [f'{solver.upper()}_{field}'
+                  for solver in SOLVER_COLUMNS for field in SAMPLE_FIELDS]
 
 CSV_COLUMNS = CSV_COLUMNS[:-1] + list(BASELINE_COLUMNS.values()) + \
-    CSV_COLUMNS[-1:] + TIME_COLUMNS + [TRAJECTORY_COLUMN]
+    CSV_COLUMNS[-1:] + TIME_COLUMNS + SAMPLE_COLUMNS + [TRAJECTORY_COLUMN]
 
 DEFAULT_MAX_EXACT_VARS = 24
 
@@ -438,6 +452,10 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
         row[nip_col] = '' if math.isinf(before) else before
         row[greedy_col] = result['best_obj_after_greedy']
         row[qubo_col] = result['best_energy']
+        for field in SAMPLE_FIELDS:
+            value = result[field]
+            row[f'{solver.upper()}_{field}'] = (json.dumps(value)
+                                               if isinstance(value, list) else value)
 
     if 'greedy' in baselines:
         start = time.perf_counter()
@@ -534,6 +552,12 @@ def provenance_lines(args, solvers, baselines, rows=()):
     ]
     if 'sa' in solvers:
         lines.append(f"simulated annealing seed: {args.seed}")
+    if solvers:
+        lines.append('raw feasibility counts budget-feasible SampleSet records among '
+                     'the <=20 lowest-energy raw records, not occurrence-weighted reads; '
+                     'the examined denominator and record diagnostics are retained')
+        lines.append('pre_greedy diagnostics describe the repair input pool; '
+                     'QA includes classical steepest descent, SA equals raw')
     if args.exact == 'gurobi':
         lines.append(f"Gurobi trajectory solve threads: {args.gurobi_threads}")
     if any(case[2] == 'auto' for case in args.cases):
