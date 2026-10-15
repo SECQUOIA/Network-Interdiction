@@ -147,3 +147,38 @@ def test_actual_capped_mps_matches_small_statevector_energy_and_labels(aer):
     assert sum(approx.record.num_occurrences)==1024
     for record in approx.data():
         assert record.energy==bqm.energy(record.sample)
+
+
+@pytest.mark.parametrize('options',[{'max_qubits':1201},{'max_bond_dimension':9},{'reps':2},
+                                    {'maxiter':5},{'shots':257},{'max_bond_dimension':'8'}])
+def test_extended_mps_enforces_its_tighter_resource_envelope(options):
+    controls=dict(method='mps',extended_mps=True,max_qubits=1200,max_bond_dimension=8,
+                  reps=1,shots=256,maxiter=4)
+    controls.update(options)
+    with pytest.raises(ValueError):
+        sampler.validate_options(**controls)
+
+
+def test_extended_mps_dense_bqm_refused_before_backend_import(monkeypatch):
+    import builtins
+    original=builtins.__import__
+    def guard(name,*args,**kwargs):
+        if name in ('qaoa_common','qaoa_qiskit'):
+            pytest.fail('backend dispatched')
+        return original(name,*args,**kwargs)
+    # 317*316/2 = 50,086, above the dedicated compiled-coupling envelope.
+    bqm=dimod.BQM({i:1 for i in range(317)},
+                  {(i,j):1 for i in range(317) for j in range(i)},0,'BINARY')
+    monkeypatch.setattr(builtins,'__import__',guard)
+    with pytest.raises(ValueError,match='50000'):
+        sampler.solve_bqm_qaoa(bqm,method='mps',extended_mps=True,max_qubits=1200,
+                              max_bond_dimension=8,maxiter=4,shots=256)
+
+
+def test_extended_mps_matches_small_default_mps(aer):
+    bqm=dimod.BQM({'a':-2,'b':1},{('a','b'):3},0,'BINARY')
+    controls=dict(method='mps',max_bond_dimension=8,maxiter=4,shots=128,seed=3)
+    first=sampler.solve_bqm_qaoa(bqm,max_qubits=256,**controls)
+    second=sampler.solve_bqm_qaoa(bqm,extended_mps=True,max_qubits=1200,**controls)
+    assert np.array_equal(first.record,second.record)
+    assert first.info['qaoa_metadata']['theta']==second.info['qaoa_metadata']['theta']

@@ -245,3 +245,21 @@ family CSV. The committed flow-reduction PDFs are under
 plot can also be generated, but its offset-dependent ratios should not be read
 as independent solution-quality evidence. The benchmark's exact squared-BQM
 energy column follows from the certified reduction: `Opt_NIP - beta*|A_I|`.
+
+## Separate hard-case MPS probe
+
+The initial ladder's refusal reflects its configured 256-qubit cap. A separate
+`run_hard_mps_probe.py` experiment tests the actual 1,095-variable hard case
+with stronger controls on the other resource dimensions: p=1, at most four
+optimizer evaluations, 256 shots, bond dimension 8, at most 50,000 compiled
+quadratic interactions, 8 GiB and 600 seconds per method. This is an explicit
+`extended_mps=True` opt-in with a 1,200-qubit guard; normal adapter limits stay
+unchanged. Statevector is never extended. Both methods use the same certified
+dual coefficient and seed 0; XY starts from the first B allowed arcs.
+
+The case and exact reference are the same archived hard covering instance.
+Atomic checkpoints preserve model metadata before sampling, complete observed
+counts before scoring, and raw scores before repair. Scoring/repair receives a
+separate 20-second allowance inside the enclosing 600-second method cap. These
+four-evaluation probe results are separate from the eight-evaluation ladder and
+are not pooled with it. Only these two bounded attempts are planned.

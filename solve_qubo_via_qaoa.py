@@ -15,7 +15,7 @@ import numpy as np
 
 
 def validate_options(*, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=24,
-                     method='statevector', max_bond_dimension=None, order='bqm'):
+                     method='statevector', max_bond_dimension=None, order='bqm', extended_mps=False):
     """Reject invalid resource controls before any optional backend import."""
     for name, value in [('reps', reps), ('shots', shots), ('maxiter', maxiter),
                         ('max_qubits', max_qubits), ('seed', seed)]:
@@ -23,13 +23,19 @@ def validate_options(*, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=24,
             raise ValueError(f'QAOA {name} must be an integer')
     if reps < 1 or shots < 1 or maxiter < 2*reps + 2:
         raise ValueError('QAOA needs reps/shots >=1 and maxiter >=2*reps+2 (COBYLA minimum)')
+    if type(extended_mps) is not bool:
+        raise ValueError('extended_mps must be a boolean')
+    if extended_mps and (method != 'mps' or max_qubits > 1200 or
+                         not isinstance(max_bond_dimension, numbers.Integral) or max_bond_dimension > 8 or
+                         reps != 1 or shots > 256 or maxiter > 4):
+        raise ValueError('extended MPS requires <=1200 qubits, bond<=8, p=1, shots<=256, evaluations<=4')
     if method not in ('statevector', 'mps') or order not in ('bqm', 'rcm'):
         raise ValueError('invalid simulation method or variable order')
     if method == 'statevector':
         if not 1 <= max_qubits <= 24 or max_bond_dimension is not None:
             raise ValueError('statevector requires max_qubits in 1..24 and no bond cap')
     elif (isinstance(max_bond_dimension, bool) or not isinstance(max_bond_dimension, numbers.Integral)
-          or not 1 <= max_bond_dimension <= 64 or not 1 <= max_qubits <= 256
+          or not 1 <= max_bond_dimension <= 64 or not 1 <= max_qubits <= (1200 if extended_mps else 256)
           or reps > 3 or shots > 10000 or maxiter > 100):
         raise ValueError('MPS requires 1..256 qubits, bond cap 1..64, p<=3, shots<=10000 and maxiter<=100')
     if not 0 <= seed < 2**32:
@@ -47,7 +53,7 @@ def validate_bqm(bqm, max_qubits):
 
 def solve_bqm_qaoa(bqm, *, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=24,
                    fixed_weight_variables=None, hamming_weight=None, initial_state='basis',
-                   method='statevector', max_bond_dimension=None, order='bqm'):
+                   method='statevector', max_bond_dimension=None, order='bqm', extended_mps=False):
     """Return raw SampleSet records with original BQM energies and run metadata.
 
     Uses one COBYLA start (the existing linear ramp), exact Aer statevector
@@ -62,11 +68,16 @@ def solve_bqm_qaoa(bqm, *, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=2
     supplies the appropriate objective and is responsible for any remaining
     penalties. MPS has a separate 256-qubit cap and requires an explicit bond
     dimension <=64; truncation can leak out of an XY fixed-weight subspace.
+    The separate opt-in extended_mps probe permits <=1200 qubits only with
+    <=50000 interactions, bond<=8, p=1, <=4 evaluations and <=256 shots.
+    Callers must impose an outer process deadline and memory cap.
     ``order='rcm'`` uses the existing deterministic interaction-graph ordering. This does not silently change the BQM or its energy units.
     """
     validate_options(reps=reps, shots=shots, maxiter=maxiter, seed=seed, max_qubits=max_qubits,
-                     method=method, max_bond_dimension=max_bond_dimension, order=order)
+                     method=method, max_bond_dimension=max_bond_dimension, order=order, extended_mps=extended_mps)
     validate_bqm(bqm, max_qubits)
+    if extended_mps and bqm.num_interactions > 50000:
+        raise ValueError('extended MPS permits at most 50000 compiled quadratic interactions')
     start = time.perf_counter()
     import qaoa_common as qc
     from qaoa_qiskit import QiskitBackend
@@ -107,7 +118,7 @@ def solve_bqm_qaoa(bqm, *, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=2
         'shots': int(shots), 'seed': int(seed), 'maxiter': int(maxiter),
         'max_qubits': int(max_qubits), 'num_qubits': len(variables),
         'variables': variables, 'variable_order': order, 'max_bond_dimension': max_bond_dimension,
-        'approximate': method == 'mps',
+        'approximate': method == 'mps', 'extended_mps': extended_mps,
         'mps_truncation_threshold': 1e-16 if method == 'mps' else None,
         'theta': [float(t) for t in theta],
         'angle_order': 'beta layers, then gamma layers', 'hamiltonian_scale': scale,
