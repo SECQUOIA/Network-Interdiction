@@ -127,12 +127,13 @@ def test_comparison_size_guard_precedes_compilation(tmp_path, monkeypatch):
         comparison.run_case(path, 1)
 
 
-def test_actual_gurobi_comparison_on_empty_window_fixture(tmp_path):
+@pytest.mark.parametrize('isolated', [False, True])
+def test_actual_gurobi_comparison_on_empty_window_fixture(tmp_path, isolated):
     import json
     import gurobipy as gp
     import run_penalty_comparison as comparison
     path = tmp_path / 'equal.flow'
-    path.write_text('4\n0 3\n0 1 5\n1 3 5\n0 2 5\n2 3 5\n')
+    path.write_text(f'{5 if isolated else 4}\n0 3\n0 1 5\n1 3 5\n0 2 5\n2 3 5\n')
     try:
         row = comparison.run_case(path, 1)
     except gp.GurobiError as error:

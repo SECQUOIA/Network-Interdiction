@@ -127,3 +127,60 @@ and `Quot.sound` are accepted; proof holes or extra axioms fail the build.
 The dedicated GitHub job performs the same build. On a memory-constrained
 machine, `LEAN_NUM_THREADS=2 LEAN_IMPORT_WORKERS=2 LEAN_STACK_SIZE_KB=16384`
 reduces Lean's default stack reservations.
+
+## Retained software comparison
+
+[`results/certified_penalties.json`](../results/certified_penalties.json) records
+six original tiny rows, the equal-path empty-window case, and one planar,
+Erdős–Rényi, and k-NN mid-size case. All ten squared-QUBO ground states attain
+the original MILP optimum after decoding. Full binary witnesses, objective
+bounds, input/source hashes, and dependency versions are retained. Nonunique
+optimal sets are compared by feasibility and value, not by edge-list equality.
+
+| Instance | B | Variables | Linear couplings | Squared couplings | Optimum flow |
+|---|---:|---:|---:|---:|---:|
+| tiny_a | 1 | 14 | 14 | 20 | 5 |
+| tiny_b | 1 / 2 | 21 | 21 | 36 | 13 / 5 |
+| tiny_c | 1 | 22 | 24 | 39 | 4 |
+| tiny_d | 1 / 2 | 21 | 21 | 36 | 13 / 6 |
+| equal_paths | 1 | 14 | 14 | 20 | 5 |
+| planar_8_s0 | 3 | 90 | 112 | 490 | 43 |
+| erdos_8_0.45_s0 | 3 | 78 | 97 | 373 | 36 |
+| knn_11_2_s0 | 3 | 81 | 99 | 375 | 15 |
+
+Coupling counts compare the two budget expressions at identical coefficients;
+the linear model at these conservative coefficients is **not** asserted to
+encode B. Every row adds exactly m(m−1)/2 interdiction couplings. No extra
+binary variables are needed. Timings are single software runs, not an
+advantage claim: the original MILP was faster than the squared MIQP on every
+row. The larger coefficient range can also hurt approximate samplers; none
+were run for this comparison, and no hardware result is inferred.
+
+The completed campaign used Gurobi 13.0.3, eight threads, MIPGap=0, a
+20-second limit per solve, and a 300-second outer limit per attempt under an
+8 GiB process limit. The driver caps cases at 12, arcs at 50, and compiled
+variables at 160 before solver dispatch. It requires both solves to finish
+optimally and independently checks the decoded max flow. CI audits the saved
+witnesses without needing a license.
+
+The [attempt ledger](../results/certified_penalties_attempts.json) retains an
+earlier export failure after the first two solves and the successful 20-solve
+attempt: 22 completed case solves total. The failed export produced no result
+file, so its timings are not silently reused. Source hashes bind the saved
+data to producer commit `1ac55133ec7dcd14d70b79d94a824221efd33bed`. The later
+isolated-vertex audit fix does not affect these connected cases; their saved
+witnesses are also checked against the final builder.
+
+Reproduce from the repository root, writing a fresh output path:
+
+```sh
+python run_penalty_comparison.py \
+  --case testcases/tiny_a.flow:1 \
+  --case testcases/tiny_b.flow:1 --case testcases/tiny_b.flow:2 \
+  --case testcases/tiny_c.flow:1 \
+  --case testcases/tiny_d.flow:1 --case testcases/tiny_d.flow:2 \
+  --case testcases/equal_paths.flow:1 \
+  --case testcases/mid/planar_8_s0.flow:3 \
+  --case testcases/mid/erdos_8_0.45_s0.flow:3 \
+  --case testcases/mid/knn_11_2_s0.flow:3 --out /tmp/penalty-comparison.json
+```

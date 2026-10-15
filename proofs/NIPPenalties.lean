@@ -135,6 +135,14 @@ theorem simultaneous_penalty_separation (U lam β feasible raw p q : ℝ)
     have hother : 0 ≤ lam * p := mul_nonneg hlam0 hp
     linarith
 
+/-- The concrete closed-form choice used by the Python helper. -/
+theorem closed_form_separation (U feasible raw p q : ℝ)
+    (hU : 0 ≤ U) (hf : feasible ≤ U) (hr : 0 ≤ raw)
+    (hp : 0 ≤ p) (hq : 0 ≤ q) (hbad : 1 ≤ p ∨ 1 ≤ q) :
+    feasible < raw + (U + 1) * p + (U + 1) * q := by
+  exact simultaneous_penalty_separation U (U + 1) (U + 1) feasible raw p q
+    hU (by linarith) (by linarith) hf hr hp hq hbad
+
 /-- info: 'NIPPenalties.quadratization_lower' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms quadratization_lower
@@ -162,5 +170,8 @@ theorem simultaneous_penalty_separation (U lam β feasible raw p q : ℝ)
 /-- info: 'NIPPenalties.simultaneous_penalty_separation' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms simultaneous_penalty_separation
+/-- info: 'NIPPenalties.closed_form_separation' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms closed_form_separation
 
 end NIPPenalties

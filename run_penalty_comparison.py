@@ -61,7 +61,8 @@ def run_case(path, B):
         raise AssertionError('solver energy and decoded binary energy differ')
     edges = sorted(g.edges())
     selected = [e for i, e in enumerate(edges) if sample[f'x_{i}']]
-    pi = {v: 1 if v == s else 0 if v == t else sample[f'pi_{v}'] for v in g}
+    # Isolated vertices can disappear during compilation; their side is free.
+    pi = {v: 1 if v == s else 0 if v == t else sample.get(f'pi_{v}', 0) for v in g}
     q = sum(sample[f'w_{i}']*(pi[u]+pi[v]+sample[f'gamma_{i}']-1)
             + pi[v]*sample[f'gamma_{i}']-pi[v]-sample[f'gamma_{i}']+1
             for i, (u, v) in enumerate(edges))
