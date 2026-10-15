@@ -1,6 +1,16 @@
 # Network-Interdiction
 Algorithms for solving maximum flow network interdiction problem with qubo-based solvers.
 
+## License
+
+The project's original code is licensed under the [MIT License](LICENSE).
+Third-party code and materials retain their own licenses and attribution.
+In particular, [qaoa_gat.py](qaoa_gat.py) adapts the upstream GAT implementation
+under [Apache-2.0](third_party/gat/LICENSE); its source notice records the
+upstream revision and local changes. The top-level MIT license does not
+replace that license. External solver packages and services retain their
+own terms.
+
 ## Setup
 
 ```
