@@ -1,0 +1,52 @@
+{
+  "source_commit": "9c6feeaf491e17f37ba486c65042daa43bf76132",
+  "command": "python run_benchmark.py --exact gurobi --solvers sa --baselines greedy,lp,benders --benders-time-limit 60 --benders-max-iterations 1000 --case testcases/50.planarflow:5:auto --case testcases/50_0.15.erdosflow:5:auto --case testcases/50_5.2dnnflow:4:auto --out results/classical_baselines_sample.csv",
+  "input_sha256": {
+    "testcases/50.planarflow": "b059aa7e99fc22aa5eaa175a35549cd4e2f8fc8b8c001d475d9a23dd5544fa7a",
+    "testcases/50_0.15.erdosflow": "2d165ecfe556609d42108b8fc7c291fa8392e45bd617a547e736b923abdcaef0",
+    "testcases/50_5.2dnnflow": "0aa659bd70e489ad0ef76af0bab5e54d994b2de962667a13a0758ccd60be2ab9"
+  },
+  "source_sha256": {
+    "benders.py": "eb9ea03f2c45f06ef8b2dd7cc4a08f177ae7beb0e45b098054950f96d9551718",
+    "run_benchmark.py": "4f927c6590dbe29295a27348dbf7efa38e1cfd36421f29f11dbf57cf686cbf4f",
+    "classical_baselines.py": "3d29bbe3cd8c297b5bc7a33d811b27d4b72cf75e47e8c1de6f15de136f9efd38",
+    "network_interdiction.py": "925129950e4d58b1547dcf93b7c3ad4f0e9f6f7916ceb127e144846a55beeaf8",
+    "solve_qubo_via_dwave.py": "9fbdb51ea61468852c077bd0dc4cfe5cae4cdf2439bc2e0f5a452e37adef859d"
+  },
+  "csv_sha256": "07a919ba15705b1dbe64313ba023a53c1ae827326b5e86128fa8b0f150cf42ad",
+  "python": "3.12.12",
+  "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpu": "Intel(R) Xeon(R) w5-2565X",
+  "packages": {
+    "networkx": "3.7",
+    "numpy": "1.26.4",
+    "scipy": "1.17.1",
+    "gurobipy": "13.0.3",
+    "dimod": "0.12.22",
+    "dwave-samplers": "1.8.0",
+    "dwave-neal": "0.6.0",
+    "dwave-system": "1.34.0"
+  },
+  "resources": {
+    "virtual_memory_limit_gib": 8,
+    "outer_timeout_sec": 600,
+    "gurobi_threads": 8,
+    "OMP_NUM_THREADS": 1,
+    "OPENBLAS_NUM_THREADS": 1,
+    "MKL_NUM_THREADS": 1,
+    "benders_time_limit_sec_per_case": 60,
+    "benders_max_iterations_per_case": 1000
+  },
+  "protocol": {
+    "attempts": 1,
+    "repeats": 1,
+    "dedicated_warmup": false,
+    "sa_seed": 0,
+    "sa_reads": 2500,
+    "sa_sweeps": 1000,
+    "sa_sweeps_note": "Installed dwave-samplers default; caller does not override num_sweeps.",
+    "sa_postprocessing": "Existing best-20 sample scoring and greedy repair.",
+    "timing_note": "Gurobi_total_time_sec, SA_total_time_sec, Greedy_time_sec, LP_time_sec + LP_repair_time_sec, and Benders_time_sec include construction/solve/scoring for each method. Reference_time_sec separately records exact references and auto-lambda calibration. File loading, environment setup and process startup excluded; usual diagnostic output included. The same process performs references first, then Gurobi, SA, greedy, LP and Benders.",
+    "scope": "Three small existing slide cases, one per family. No hardware, decomposition, Lagrangian or random-greedy pass. Not a full family comparison, hardness study, scaling result or speedup claim."
+  }
+}
