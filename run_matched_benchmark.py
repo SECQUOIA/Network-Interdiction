@@ -85,21 +85,22 @@ def _embedding_child(connection, source, target):
 def hard_embedding_attempt(source, target, *, seconds=12):
     """Contain minorminer setup, which can exceed its cooperative timeout.
 
-    This campaign already requires POSIX resource limits. Forking a single
-    worker avoids serializing a dense interaction graph before the deadline.
-    The pipe is drained before join, including large successful certificates.
+    A fresh interpreter avoids inheriting native threads from the caller. The
+    pipe is drained before join, including large successful certificates.
+    Launch/serialization time is charged; the enclosing process cap also
+    contains any launch operation that itself overruns.
     """
     import multiprocessing
     from profile_embedding import graph_digest
     if not 0 < seconds <= 30:
         raise ValueError('embedding outer limit must be in (0,30]')
-    context=multiprocessing.get_context('fork')
+    context=multiprocessing.get_context('spawn')
     reader,writer=context.Pipe(duplex=False)
     process=context.Process(target=_embedding_child,args=(writer,source,target))
     start=time.perf_counter()
     process.start();writer.close()
     try:
-        if reader.poll(seconds):
+        if reader.poll(max(0, seconds-(time.perf_counter()-start))):
             try:
                 result=reader.recv()
             except EOFError:

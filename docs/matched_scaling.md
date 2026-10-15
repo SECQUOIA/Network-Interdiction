@@ -87,7 +87,7 @@ OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
   .venv/bin/python run_simulator_scaling.py --out results/simulator_scaling.json
 ```
 
-Results and their independent artifact audits are added after execution. This
+The retained results below include independent artifact audits. This
 protocol does not imply that a challenging full instance becomes simulatable or
 embeddable merely because it has been partitioned.
 
@@ -97,7 +97,11 @@ The first matched campaign completed all 108 dispatches and retains the largest
 planar fit pass as `outer_time_limit`: minorminer's internal timeout did not
 contain all native setup work. A supplementary fit run adds a 12-second process
 limit to each embedding attempt and retains all five whole/piece size records.
-The first attempt is not overwritten or relabeled as successful.
+The first attempt is not overwritten or relabeled as successful. The saved
+supplement used the POSIX fork worker at its pinned producer. The final driver
+uses a fresh spawned interpreter to avoid inheriting native threads from callers;
+its containment and successful mapping are checked independently. Timings from
+the archived fork run are not relabeled as measurements of the spawn path.
 
 The [source-edit note](../results/matched_scaling_execution.json) preserves a
 CSV/plot-only patch temporarily present during part of the first campaign.
@@ -107,3 +111,137 @@ the imported `run_benchmark.parse_case` was unchanged. The patch was restored
 before the last two cases and applied permanently only after the campaign.
 This is not claimed to be an immutable whole-tree execution. All reported
 results retain the original producing snapshot and this exception.
+
+## Retained matched results
+
+The [raw campaign](../results/matched_scaling.json) has 108 method dispatches;
+the [supplement](../results/matched_fit_supplement.json) adds one fit dispatch.
+The independent exporter recomputes all retained original-network witnesses,
+raw sample energies/flows, multiplier surrogate bounds and successful embedding
+certificates. It produced seven family CSVs: [road](../results/matched/road.csv),
+[contact](../results/matched/contact.csv), [power](../results/matched/power.csv),
+[planar](../results/matched/planar.csv), [Erdős–Rényi](../results/matched/erdos.csv),
+[k-NN](../results/matched/knn.csv), and [covering](../results/matched/covering.csv).
+They use the shared benchmark columns, add explicit statuses and compiled qubit
+counts, and leave hardware columns empty. The plot understands actual zero-flow
+raw solutions when feasibility counts are supplied, preserving the older zero
+sentinel for historical CSVs without those diagnostics.
+
+Flows below are minimized, in each input's own units. Decomposition columns
+show the best audited feasible candidate after one iterated round, including
+curve work and partial prefixes. Sequential results and reconstructed-cut
+results are separately retained in JSON/CSV; no surrogate bound is a global
+NIP bound. A dash means the curve plan was refused before any child solve.
+
+| Case (B) | Optimum | Benders | Greedy | LP variant | SA + repair | Mincut | Local | Marginal | Multiplier |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ema (3) | 0 | 0 | 0 | 0 | 6102 | 0 | 10599 | 0 | 0 |
+| school4a (3) | 1640 | 1640 | 1640 | 1640 | 6100 | 1640 | 1640 | 1640 | 1640 |
+| ieee14 (2) | 53 | 53 | 53 | 53 | 193 | 53 | 53 | 76 | 76 |
+| 50.planarflow (6) | 205 | 205 | 205 | 205 | 573 | 243 | 476 | 205 | 205 |
+| 50_0.15.erdosflow (6) | 294 | 294 | 294 | 294 | 636 | 319 | 394 | 294 | 294 |
+| 50_5.2dnnflow (6) | 75 | 75 | 75 | 75 | 361 | 86 | 220 | 75 | 75 |
+| cover_n12_s0 (20) | 4 | 4 | 5 | 5 | 7 | 9 | 7 | 9 | 6 |
+| cover_n30_s0 (192) | 8 | 14 | 30† | 16† | 20 | 28 | 16 | — | — |
+| 150.planarflow (6) | 691 | 691 | 774† | 691 | 1130 | 691 | 995 | 691 | 691 |
+
+† Cooperative time limit reached; the feasible incumbent is retained. Benders
+on the hard covering case reached its 20-second limit at flow 14 with lower
+bound 3. The archived MILP proved flow 8 in 12.16 seconds. The nine-case
+comparison therefore supplies no advantage claim: even its best completed
+decomposition result is 16 on this hard case. Greedy and the LP variant match
+the optimum on six easy cases; LP also matches the largest planar optimum.
+
+SA completed 200 reads on eight cases and 61 on the largest planar case before
+its sampling allowance stopped it. All 20 retained records per case satisfy
+the budget. This shows that certified penalties can remove parameter search
+and yield feasible samples without good objective values. The shared greedy
+policy only adds/removes arcs to meet B; it does not improve an already exact-B
+cut by swaps. These SA results must not be attributed to a local-swap search.
+
+## Whole-model and four-piece size limits
+
+| Case | Whole variables | Largest piece | All pieces pass QCI schema | All pieces embedded on ideal P16 |
+| --- | ---: | ---: | --- | --- |
+| ema | 846 | 387 | yes | no |
+| school4a | 1273 | 361 | yes | no |
+| ieee14 | 132 | 33 | yes | yes |
+| 50.planarflow | 912 | 261 | yes | no |
+| 50_0.15.erdosflow | 1122 | 315 | yes | no |
+| 50_5.2dnnflow | 1068 | 375 | yes | no |
+| cover_n12_s0 | 142 | 97 | yes | yes |
+| cover_n30_s0 | 1095 | 696 | no | no |
+| 150.planarflow | 2812 | 1150 | no | no |
+
+The largest whole model with a successful squared-BQM P16 embedding here is
+142 variables (covering n=12), whose four pieces top out at 97 variables. The
+largest whole model whose four pieces all pass the QCI schema guard is the
+1,273-variable contact network (largest piece 361). That is an offline size
+observation, not a hardware result. The hard 1,095-variable covering case still
+needs pieces as large as 696; the 2,812-variable planar case needs 1,150.
+Neither is reached by the four-piece QCI or capped-MPS configuration. The three
+new 12-second embedding-worker timeouts in the supplementary run remain explicit.
+
+These squared-budget embeddings include a clique among allowed interdiction
+variables. Earlier [linear-BQM embedding measurements](../results/embedding_resources.json)
+used a different interaction graph; their timings/fit rates are not a matched
+penalty-only attribution experiment. Device execution, live defects/calibration,
+and actual QPU times remain unmeasured.
+
+## Simulator results
+
+The [simulator artifact](../results/simulator_scaling.json) retains 42 method
+dispatches, with full observed counts for each completed quantum sampler.
+Statevector completed the 14- and 21-variable cases and refused larger inputs
+at its configured 24-variable guard. Approximate MPS completed at 149 variables,
+with bond dimension 8; this is the largest tested meaningful case, **not** a
+universal maximum or a guarantee for smaller inputs.
+
+| Variables (B) | Exact flow | SA + repair | Penalty MPS raw / repaired | XY MPS raw / repaired | XY exact-B shots / 256 |
+| --- | ---: | ---: | --- | --- | --- |
+| 14 (1) | 5 | 5 | 5 / 5 | 5 / 5 | 256 |
+| 21 (1) | 13 | 13 | 13 / 13 | 13 / 13 | 256 |
+| 40 (1) | 40 | 40 | 40 / 40 | 40 / 40 | 252 |
+| 78 (1) | 144 | 144 | 144 / 144 | 144 / 144 | 253 |
+| 116 (1) | 89 | 89 | 145 / 89 | native crash | — |
+| 149 (1) | 209 | 223 | 209 / 209 | 303 / 303 | 253 |
+| 1095 (192) | 8 | 20 | refused | refused | — |
+
+The 116-variable XY MPS worker terminated with signal 11 after 5.03 seconds,
+without a backend diagnostic; its row is retained and no repair or solution is
+invented. The same fixed configuration completed the 149-variable XY case, so
+successful size is not monotonic. Reproduce the isolated failed case with:
+
+```bash
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  timeout 60 .venv/bin/python run_simulator_scaling.py \
+  --worker testcases/mid/planar_13_s0.flow 1 xy_mps --out /tmp/xy116-new.json
+```
+
+The exact statevector XY runs retained all 256 shots in the fixed-budget
+sector. MPS XY retained 252/256 at 40 variables and 253/256 at 78 and 149;
+its exact-unitary guarantee cannot be applied unchanged after truncation.
+Raw surviving flows are audited only for the selected <=20 records; full-shot
+budget counts include all observations. The 116-variable penalty MPS sampler
+completed but failed the predeclared meaningfulness criterion: all its selected
+feasible raw records left flow unchanged, and repair supplied the improvement.
+
+At 149 variables, penalty/XY logical depths were 104/34 and two-qubit gate
+counts were 1,223/280; method wall times were 15.18/4.05 seconds. These use
+different cost Hamiltonians, unconstrained connectivity and one seeded run.
+The shallower XY circuit returned repaired flow 303 versus the optimum 209;
+no runtime or solution-quality advantage follows from the gate count alone.
+
+The hard case has 1,095 variables and was refused by both simulator guards
+before backend construction. Its exact reference is 8 and bounded SA returns
+20. Its largest four-way piece is also above both guards. Thus a direct
+QAOA comparison on the measured hard set remains beyond this validated local
+configuration; this study records that gap instead of calling a refusal a run.
+Actual device execution and QPU time remain excluded from this software series.
+
+To regenerate family plots, run `network_interdiction_plot.py --csv` on each
+family CSV. The committed flow-reduction PDFs are under
+[`results/matched/figures`](../results/matched/figures). The existing energy-ratio
+plot can also be generated, but its offset-dependent ratios should not be read
+as independent solution-quality evidence. The benchmark's exact squared-BQM
+energy column follows from the certified reduction: `Opt_NIP - beta*|A_I|`.

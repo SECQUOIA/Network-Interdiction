@@ -51,12 +51,15 @@ def test_fit_compiles_actual_restricted_pieces_and_schema(monkeypatch):
     assert all(row['qci_schema']['status']=='accepted_offline' for row in result['rows'])
 
 
+def slow_embedding_child(connection, source, target):
+    import time
+    time.sleep(10)
+
+
 def test_embedding_outer_limit_contains_native_overrun(monkeypatch):
     import time
     import networkx as nx
-    def slow(connection, source, target):
-        time.sleep(10)
-    monkeypatch.setattr(matched,'_embedding_child',slow)
+    monkeypatch.setattr(matched,'_embedding_child',slow_embedding_child)
     start=time.perf_counter()
     result=matched.hard_embedding_attempt(nx.path_graph(3),nx.path_graph(4),seconds=.05)
     assert result['status']=='embedding_outer_time_limit'

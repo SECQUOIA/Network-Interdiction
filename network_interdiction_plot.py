@@ -196,11 +196,11 @@ def draw(series, x_labels, ylabel, ylim, out_path, reference_line=None):
 
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=14)
-    plt.xlabel('#Variables (#Interdicted Edges)', fontsize=20)
+    plt.xlabel('Logical variables (budget B)', fontsize=20)
     plt.ylabel(ylabel, fontsize=20)
     plt.xticks(centres, x_labels, rotation=45)
-    plt.legend(prop={'size': 12}, loc='upper left', ncol=min(4, len(series)),
-               fancybox=False, shadow=True)
+    plt.legend(prop={'size': 10}, loc='lower left', bbox_to_anchor=(0, 1.02),
+               ncol=min(4, len(series)), fancybox=False, shadow=False)
     plt.tight_layout()
     plt.ylim(ylim)
     plt.savefig(out_path)
@@ -242,7 +242,7 @@ def main(argv=None):
                      for label in ('QA', 'SA') if label in energy_ratio}
 
     flow_path = os.path.join(args.outdir, f'{stem}_flow_reduction.pdf')
-    draw(flow_series, x_labels, 'Flow Reduction from Maxflow against OPT',
+    draw(flow_series, x_labels, 'Fraction of optimal flow reduction',
          (0.0, 1.1), flow_path, reference_line=1)
 
     written = [flow_path]

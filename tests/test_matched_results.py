@@ -42,3 +42,17 @@ def test_simulator_shots_budgets_energies_and_feasible_results():
     hard=[r for r in summary if r['file'].endswith('cover_n30_s0.flow')]
     assert len(hard)==4
     assert all(r['status']=='qubit_guard_refused' and not r['meaningful'] for r in hard)
+
+
+def test_supplementary_fit_keeps_original_timeout_and_audits_all_piece_models(artifact):
+    import copy
+    supplement=json.loads((ROOT/'results/matched_fit_supplement.json').read_text())
+    assert supplement['attempts']==[dict(attempt=1,status='completed',completed_methods=1)]
+    row=next(r for r in artifact['cases'] if r['name']=='150.planarflow')
+    assert row['methods']['fit']['status']=='outer_time_limit'
+    combined=copy.deepcopy(row)
+    combined['methods']['fit']=supplement['cases'][0]['methods']['fit']
+    assert combined['methods']['fit']['status']=='completed'
+    assert combined['methods']['fit']['max_piece_qubits']==1150
+    assert len(combined['methods']['fit']['rows'])==5
+    exported.audit_case(combined,matched.cases_and_references()['150.planarflow',6])

@@ -1,0 +1,50 @@
+{
+  "renderer": "network_interdiction_plot.py",
+  "renderer_sha256": "eb46d81100410288c873fd7330dc32fa202c09e54db8083b6542f09876dfc822",
+  "matplotlib": "3.10.9",
+  "equality_layer": "numeric series and visually inspected PDF pages; PDF timestamps are not normalized",
+  "figures": [
+    {
+      "pdf": "contact_flow_reduction.pdf",
+      "sha256": "912b5f5cdf1e402b8835562bb2ce987ad8afba68b3eb47a28f289376230f23a8",
+      "input_csv": "results/matched/contact.csv",
+      "input_sha256": "0ce6d15cd4f1ac07b4cb7f0fdd2f97619059d336fd697036aef2606744717b92"
+    },
+    {
+      "pdf": "covering_flow_reduction.pdf",
+      "sha256": "bfa86c4064c71014b9d5ed43567e94fe7207dee7522371457327176e022ae11e",
+      "input_csv": "results/matched/covering.csv",
+      "input_sha256": "5ee3666b32ee91a5bd34fa32c8d77ef4666923a7a5fafc3339db880b58f20832"
+    },
+    {
+      "pdf": "erdos_flow_reduction.pdf",
+      "sha256": "a4651f616857059b0f4d00703f234a7946e5f658563653fe7b644b15a47f52a3",
+      "input_csv": "results/matched/erdos.csv",
+      "input_sha256": "6c0e7b8b7d252126532677cfd2ae48bd65810f20d9fd7846bbfdc9d45aefc9d2"
+    },
+    {
+      "pdf": "knn_flow_reduction.pdf",
+      "sha256": "668ee427e197697dd0c4d0e9cdc9ba0774d837e7a15cdaeb7c8a0f6faba8f4b1",
+      "input_csv": "results/matched/knn.csv",
+      "input_sha256": "eedcff03ad9956d94d89b74d9325464aeecda935f72b39e3e3f0cc26a277cc44"
+    },
+    {
+      "pdf": "planar_flow_reduction.pdf",
+      "sha256": "1c12c3101e406e033230b379c19450fd2e75beff32c3e99a3b07c7b47681b28d",
+      "input_csv": "results/matched/planar.csv",
+      "input_sha256": "1a7f6957de5fdd8cf0d7749022899595319bb6f62054e3cf1e0579d2278f4cc6"
+    },
+    {
+      "pdf": "power_flow_reduction.pdf",
+      "sha256": "746207efb9e2740285829d9272a9cea2ad17ce4e798bd055510710c5d898f1b5",
+      "input_csv": "results/matched/power.csv",
+      "input_sha256": "a543a359a1bf17fcdcd40a025e4ae214d67ddee30e3e1d38e3e0723eb463821a"
+    },
+    {
+      "pdf": "road_flow_reduction.pdf",
+      "sha256": "8c9827ddb2e593a20b3da77de21151c007585f686875bd6b6fa6337435a305de",
+      "input_csv": "results/matched/road.csv",
+      "input_sha256": "8c0ff664023a8764753efc131f5e5647d70c42624e8719279a363f78cee4a2f2"
+    }
+  ]
+}
