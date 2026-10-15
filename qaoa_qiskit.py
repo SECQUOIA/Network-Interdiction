@@ -22,6 +22,7 @@ import sys
 
 import numpy as np
 from qiskit import transpile
+from qiskit.circuit import ParameterVector, QuantumCircuit
 from qiskit.circuit.library import qaoa_ansatz
 from qiskit.quantum_info import SparsePauliOp
 from qiskit_aer import AerSimulator
@@ -31,7 +32,7 @@ import qaoa_common
 
 # The gates qaoa_ansatz() of a Z/ZZ operator reduces to. Transpiling once to
 # these keeps the cost layer as RZ/RZZ, which Aer simulates directly.
-BASIS_GATES = ['h', 'rz', 'rzz', 'rx', 'cx']
+BASIS_GATES = ['h', 'rz', 'rzz', 'rx', 'ry', 'cx']
 
 # Aer simulation methods: the exact statevector (up to qaoa_common's
 # EXACT_QUBITS for the exact scores, about 30 qubits in memory) and the
@@ -63,11 +64,16 @@ class QiskitBackend:
     a cap of 64 changed <H_C>/scale by 6e-5 (relative 1e-5) and cut the
     time from 71 s to 5 s. MPS wants a qubit order that keeps couplings
     short: build the problem with order='rcm'.
+
+    `warm_start_angles`, when supplied, gives one Ry angle per qubit in
+    [0, pi] and replaces the X mixer by sin(angle) X + cos(angle) Z on
+    that qubit. regularized_warm_start() supplies these angles. At pi/2
+    this reduces to the standard initial state and mixer.
     """
     name = 'qiskit'
 
     def __init__(self, problem, reps, method='statevector',
-                 max_bond_dimension=None):
+                 max_bond_dimension=None, warm_start_angles=None):
         if method not in METHODS:
             raise ValueError(f'unknown method {method!r}, expected one of '
                              f'{tuple(METHODS)}')
@@ -83,7 +89,28 @@ class QiskitBackend:
         # Exact probabilities need the statevector.
         self.exact_probabilities = method == 'statevector'
         self.operator = cost_operator(problem)
-        ansatz = qaoa_ansatz(self.operator, reps=reps)
+        if warm_start_angles is None:
+            ansatz = qaoa_ansatz(self.operator, reps=reps)
+        else:
+            angles = np.asarray(warm_start_angles, dtype=float)
+            if angles.shape != (problem.num_qubits,) or not np.all(
+                    np.isfinite(angles) & (angles >= 0) & (angles <= np.pi)):
+                raise ValueError('warm-start angles must be in [0, pi], one per qubit')
+            ansatz = QuantumCircuit(problem.num_qubits)
+            betas, gammas = ParameterVector('β', reps), ParameterVector('γ', reps)
+            for i, angle in enumerate(angles):
+                ansatz.ry(float(angle), i)
+            for beta, gamma in zip(betas, gammas):
+                for i, coeff in enumerate(problem.h):
+                    if coeff != 0:
+                        ansatz.rz(2 * gamma * coeff / problem.scale, i)
+                for (i, j), coeff in problem.J.items():
+                    ansatz.rzz(2 * gamma * coeff / problem.scale, i, j)
+                for i, angle in enumerate(angles):
+                    # exp(-i beta (sin(angle) X + cos(angle) Z)).
+                    ansatz.ry(-float(angle), i)
+                    ansatz.rz(2 * beta, i)
+                    ansatz.ry(float(angle), i)
         # qaoa_ansatz() names its parameters β[0..p-1] and γ[0..p-1], and
         # circuit.parameters sorts them so: a theta vector binds in the
         # [beta..., gamma...] order qaoa_common uses.

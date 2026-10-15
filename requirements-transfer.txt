@@ -1,0 +1,6 @@
+# Optional parameter transfer, on top of requirements.txt and requirements-qaoa.txt.
+# CPU-only PyTorch is enough: install torch from its CPU wheel index first.
+torch>=2.2
+torch-geometric>=2.5
+# provide_params()/constructor reps API; pin while upstream APIs are evolving.
+qaoa_training_pipeline @ git+https://github.com/qiskit-community/qaoa_training_pipeline.git@4bad7bc13e132d29f5545d60fa655a6229baa05b
