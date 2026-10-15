@@ -1,4 +1,4 @@
-"""Sample a binary BQM with the existing Qiskit Aer penalty-QAOA backend.
+"""Sample a binary BQM with Aer QAOA and optional fixed-weight XY mixing.
 
 This adapter trains and samples only. Exact NIP references and greedy repair
 belong to run_benchmark/qubo_verify_parameters, so they are shared with SA/QA/QCI
@@ -37,7 +37,8 @@ def validate_bqm(bqm, max_qubits):
         raise ValueError('QAOA coefficients and offset must be finite')
 
 
-def solve_bqm_qaoa(bqm, *, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=24):
+def solve_bqm_qaoa(bqm, *, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=24,
+                   fixed_weight_variables=None, hamming_weight=None, initial_state='basis'):
     """Return raw SampleSet records with original BQM energies and run metadata.
 
     Uses one COBYLA start (the existing linear ramp), exact Aer statevector
@@ -46,6 +47,11 @@ def solve_bqm_qaoa(bqm, *, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=2
     memory guard, not a hardware-fit claim. All three stage times are wall time;
     building includes imports and Hamiltonian/circuit construction, training
     includes expectation evaluation, and sampling includes the shot job.
+
+    An optional fixed-weight variable register selects the XY mixer. Its
+    Hamming weight is enforced by state preparation and gates; the caller
+    supplies the appropriate objective and is responsible for any remaining
+    penalties. This does not silently change the BQM or its energy units.
     """
     validate_options(reps=reps, shots=shots, maxiter=maxiter, seed=seed, max_qubits=max_qubits)
     validate_bqm(bqm, max_qubits)
@@ -60,7 +66,18 @@ def solve_bqm_qaoa(bqm, *, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=2
         raise ValueError('QAOA needs a nonconstant Hamiltonian with finite coefficients')
     # QiskitBackend's cost protocol only needs these fields, not NIP references.
     problem = SimpleNamespace(h=h, J=J, offset=offset, scale=scale, num_qubits=len(variables))
-    backend = QiskitBackend(problem, int(reps))
+    mixer = None
+    if fixed_weight_variables is not None:
+        from qaoa_xy import FixedWeightMixer
+        labels = tuple(fixed_weight_variables)
+        if any(v not in variables for v in labels):
+            raise ValueError('fixed-weight variables must belong to the BQM')
+        mixer = FixedWeightMixer(tuple(variables.index(v) for v in labels),
+                                 hamming_weight, initial_state)
+        mixer.validate(len(variables))
+    elif hamming_weight is not None or initial_state != 'basis':
+        raise ValueError('fixed-weight settings require a variable register')
+    backend = QiskitBackend(problem, int(reps), fixed_weight=mixer)
     build_time = time.perf_counter() - start
     start = time.perf_counter()
     theta, value, evaluations = qc.optimize_angles(
@@ -83,6 +100,12 @@ def solve_bqm_qaoa(bqm, *, reps=1, shots=2500, maxiter=100, seed=0, max_qubits=2
         'qiskit': importlib.metadata.version('qiskit'),
         'qiskit_aer': importlib.metadata.version('qiskit-aer'),
     }
+    if mixer is not None:
+        metadata['mixer'] = 'parity-partitioned XY ring on register; X elsewhere'
+        metadata['fixed_weight_variables'] = list(labels)
+        metadata['fixed_weight_qubits'] = list(mixer.qubits)
+        metadata['hamming_weight'] = int(mixer.weight)
+        metadata['initial_state'] = mixer.initial
     return dimod.SampleSet.from_samples_bqm(
         (list(counts), variables), bqm, num_occurrences=list(counts.values()),
         info={'qaoa_metadata': metadata})

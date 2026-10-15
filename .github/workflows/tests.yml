@@ -46,7 +46,7 @@ jobs:
         # cannot pass without exercising both backends.
         env:
           REQUIRE_QAOA_BACKENDS: '1'
-        run: python -m pytest tests/test_qaoa.py tests/test_qaoa_large.py tests/test_qaoa_benchmark.py -v -ra
+        run: python -m pytest tests/test_qaoa.py tests/test_qaoa_large.py tests/test_qaoa_benchmark.py tests/test_qaoa_xy.py -v -ra
 
   qci:
     # The SDK pins NetworkX <3, so it must not share the core environment.
