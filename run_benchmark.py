@@ -426,12 +426,24 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
 
     if 'qaoa' in solvers:
         from solve_qubo_via_qaoa import validate_options, validate_bqm
-        options = qaoa_options or {}
-        validate_options(seed=0 if sa_seed is None else sa_seed, **options)
+        options = dict(qaoa_options or {})
+        engine = options.pop('engine', 'aer')
+        if engine == 'ibm':
+            from qaoa_ibm import validate_options as validate_ibm_options, is_local_backend
+            backend = options.pop('backend')
+            validate_ibm_options(seed_transpiler=0 if sa_seed is None else sa_seed, **options)
+            qubit_limit = min(options.get('max_qubits', 127), backend.num_qubits)
+            if is_local_backend(backend):
+                qubit_limit = min(qubit_limit, 24)
+        elif engine == 'aer':
+            validate_options(seed=0 if sa_seed is None else sa_seed, **options)
+            qubit_limit = options.get('max_qubits', 24)
+        else:
+            raise ValueError(f'unknown QAOA engine {engine!r}')
         # Positive placeholders count actual compiled variables before an exact
         # reference or penalty-window scan can dispatch expensive solves.
         sizing_bqm = ni.nip_to_qubo(B, di_g, src_node, tgt_node, 1, 2)
-        validate_bqm(sizing_bqm, options.get('max_qubits', 24))
+        validate_bqm(sizing_bqm, qubit_limit)
 
     row = {column: '' for column in CSV_COLUMNS}
     row.update({
@@ -607,11 +619,20 @@ def provenance_lines(args, solvers, baselines, rows=()):
         lines.append('QCI_time_sec includes worker startup/authentication/upload/queue/results; '
                      'QCI_device_usage_sec is rounded billable usage, not precise QPU time')
     if 'qaoa' in solvers:
-        lines.append(f'QAOA: Qiskit Aer statevector, p={args.qaoa_reps}, '
-                     f'shots={args.qaoa_shots}, COBYLA maxiter={args.qaoa_maxiter}, '
-                     f'max_qubits={args.qaoa_max_qubits}, seed={args.seed}; no hardware')
-        lines.append('QAOA_time_sec includes circuit building/training/shots; '
-                     'QAOA_metadata records stage times, angles and logical circuit resources')
+        if args.qaoa_engine == 'ibm':
+            lines.append(f'QAOA: IBM Runtime fixed angles, backend={args.ibm_backend}, '
+                         f'p={args.qaoa_reps}, shots={args.qaoa_shots}, '
+                         f'max_qubits={args.qaoa_max_qubits}, transpiler seed={args.seed}; '
+                         'no angle optimization; hardware submission')
+            lines.append('QAOA_time_sec includes transpilation/submission/queue/results; '
+                         'QAOA_metadata records job ID, routed resources and service usage '
+                         '(accounting, not circuit duration); no automatic resubmission')
+        else:
+            lines.append(f'QAOA: Qiskit Aer statevector, p={args.qaoa_reps}, '
+                         f'shots={args.qaoa_shots}, COBYLA maxiter={args.qaoa_maxiter}, '
+                         f'max_qubits={args.qaoa_max_qubits}, seed={args.seed}; no hardware')
+            lines.append('QAOA_time_sec includes circuit building/training/shots; '
+                         'QAOA_metadata records stage times, angles and logical circuit resources')
     if solvers:
         lines.append('raw feasibility counts budget-feasible SampleSet records among '
                      'the <=20 lowest-energy raw records, not occurrence-weighted reads; '
@@ -679,7 +700,17 @@ def main(argv=None):
     parser.add_argument('--qaoa-maxiter', type=int, default=100,
                         help='COBYLA evaluation limit; at least 2*reps+2 (default: 100)')
     parser.add_argument('--qaoa-max-qubits', type=int, default=24,
-                        help='statevector variable limit, at most 24 (default: 24)')
+                        help='variable limit; Aer permits at most 24 (default: 24)')
+    parser.add_argument('--qaoa-engine', choices=['aer', 'ibm'], default='aer',
+                        help='Aer training+sampling, or IBM Runtime fixed-angle sampling')
+    parser.add_argument('--ibm-backend', help='explicit device name from a saved IBM Runtime account')
+    parser.add_argument('--ibm-theta', type=float, nargs='+',
+                        help='2*p fixed angles in beta-then-gamma order, same normalized Hamiltonian')
+    parser.add_argument('--ibm-max-depth', type=int, default=10000)
+    parser.add_argument('--ibm-timeout', type=float, default=300,
+                        help='cooperative result-polling timeout; does not cancel remote jobs')
+    parser.add_argument('--ibm-max-execution-time', type=int, default=300,
+                        help='service execution cap in seconds, excluding queue time')
     parser.add_argument(
         '--baselines', type=parse_baselines, default='greedy,random',
         metavar='greedy[,random]',
@@ -712,11 +743,24 @@ def main(argv=None):
     qaoa_options = dict(reps=args.qaoa_reps, shots=args.qaoa_shots,
                         maxiter=args.qaoa_maxiter, max_qubits=args.qaoa_max_qubits)
     if 'qaoa' in solvers:
-        from solve_qubo_via_qaoa import validate_options
         try:
-            validate_options(seed=args.seed, **qaoa_options)
+            if args.qaoa_engine == 'ibm':
+                from qaoa_ibm import validate_options as validate_ibm_options
+                if not args.ibm_backend:
+                    raise ValueError('--qaoa-engine ibm requires --ibm-backend')
+                qaoa_options = dict(theta=args.ibm_theta, reps=args.qaoa_reps,
+                    shots=args.qaoa_shots, max_qubits=args.qaoa_max_qubits,
+                    max_depth=args.ibm_max_depth, result_timeout_sec=args.ibm_timeout,
+                    max_execution_time_sec=args.ibm_max_execution_time)
+                validate_ibm_options(seed_transpiler=args.seed, **qaoa_options)
+            else:
+                from solve_qubo_via_qaoa import validate_options
+                validate_options(seed=args.seed, **qaoa_options)
         except ValueError as error:
             parser.error(str(error))
+        if args.qaoa_engine == 'ibm':
+            from qiskit_ibm_runtime import QiskitRuntimeService
+            qaoa_options.update(engine='ibm', backend=QiskitRuntimeService().backend(args.ibm_backend))
     baselines = args.baselines if isinstance(args.baselines, list) else \
         parse_baselines(args.baselines)
     # One generator for the whole run, so a CSV is reproducible from its

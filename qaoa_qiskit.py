@@ -54,8 +54,8 @@ def cost_operator(problem):
 class QiskitBackend:
     """
     The QAOA circuit for one problem and depth, simulated with Aer's V2
-    primitives (an IBM device would need runtime primitives and the circuit
-    transpiled to its ISA, #17).
+    primitives. qaoa_ibm.py supplies fixed-angle Runtime sampling after routing
+    the same cost circuit to a device ISA (#17).
 
     `method` is 'statevector' (exact) or 'mps' (matrix product state).
     `max_bond_dimension` caps the MPS bond dimension: None keeps it exact,

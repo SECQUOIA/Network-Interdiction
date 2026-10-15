@@ -208,7 +208,8 @@ caps statevectors at 24 qubits. The standalone modules below still support
 larger approximate MPS runs. An unselected pass or an empty strict lambda
 window leaves all QAOA columns empty. The existing plot still displays SA/QA
 series; QAOA comparison data is available in the CSV. No IBM account or hardware
-submission is involved; Runtime integration and device fitting remain under #17.
+submission is involved in this default Aer path. The optional IBM path below
+uses the same result columns and reference scoring.
 
 The [saved shared-run sample](results/shared_sa_qaoa.csv) and
 [manifest](results/shared_sa_qaoa.json) use seed 0, 2500 SA reads, 2500 Aer
@@ -227,6 +228,70 @@ warmup histories: Qiskit imports are charged to the first QAOA call. They do not
 establish a speedup or an advantage. The 21-qubit case is the largest in this
 bounded sample, not a demonstrated simulator limit. All selected cuts are
 independently audited, and source/input hashes are pinned in the manifest.
+
+### IBM Runtime and offline routing
+
+[qaoa_ibm.py](qaoa_ibm.py) implements fixed-angle sampling through the
+[current client-side IBM Runtime Sampler](https://quantum.cloud.ibm.com/docs/en/api/qiskit-ibm-runtime/executor-sampler-sampler).
+Install `requirements-ibm.txt` alongside core and QAOA requirements. The tested
+Runtime 0.50 API is bounded to its minor version; IBM dependencies stay optional.
+The adapter takes a BQM, an explicit backend and `2*p` finite angles in the same
+normalized-Hamiltonian beta-then-gamma order as Aer. Angles can be trained locally
+or transferred; this path performs no hardware optimization loop. Measurements
+are attached before routing so returned classical bit `i` still names BQM
+variable `i`, even after placement and swaps. Energies are recomputed from the
+original BQM, including its offset.
+
+For a future hardware run, configure a saved account using IBM's
+[account setup instructions](https://quantum.cloud.ibm.com/docs/en/guides/save-credentials),
+then select a device and supplied angles explicitly:
+
+```bash
+python run_benchmark.py --exact brute --solvers qaoa --baselines greedy \
+    --case testcases/tiny_a.flow:1:7.5 --qaoa-engine ibm \
+    --ibm-backend YOUR_DEVICE --ibm-theta 0.441105168324448 -0.6094963505585733 \
+    --qaoa-reps 1 --qaoa-shots 2500 --qaoa-max-qubits 24 \
+    --ibm-max-depth 10000 --ibm-timeout 300 --ibm-max-execution-time 300 \
+    --out results/ibm.csv
+```
+
+**That command submits a hardware job.** The example angles are the saved
+`tiny_a`, lambda 7.5 Aer angles; they are not asserted to work well on a device.
+`--qaoa-maxiter` applies only to Aer. `--seed` seeds the IBM transpiler, not QPU
+measurements. Runtime jobs disable gate/measurement twirling and dynamical
+decoupling for a direct sampled-circuit comparison. `QAOA_time_sec` includes
+transpilation, client preparation, submission, queue and results; it excludes
+exact references/BQM construction and does not include earlier angle training.
+`QAOA_metadata` retains the job ID, execution mode, angles, target width,
+active physical qubits, layout, routed depth/gate counts, stage times and SDK
+versions. Service usage fields retain their original names and status: they
+measure service accounting, not bare circuit duration. Missing usage stays
+unmeasured; local SDK placeholder zeros are not reported as QPU timings.
+
+Width is checked before reference solves, routed depth before submission, and
+local simulation is capped at 24 logical **and active routed** qubits. The result
+deadline is cooperative: an individual SDK/network call can overrun it. A timeout
+or malformed result reports the known job ID without cancelling or resubmitting;
+inspect that job before retrying. The separate service execution cap excludes
+queue time. No live account or hardware was used to validate this implementation.
+Tests use actual SDK [local mode](https://quantum.cloud.ibm.com/docs/en/guides/local-testing-mode)
+with Aer and a bundled fake backend, while forbidding HTTP requests.
+
+[profile_ibm_resources.py](profile_ibm_resources.py) only builds and routes
+circuits against bundled Sherbrooke (127 qubits) and Torino (133 qubits)
+snapshots. It never creates a service or samples a circuit:
+
+```bash
+python profile_ibm_resources.py --case testcases/tiny_a.flow:1:10 \
+    --case testcases/50.planarflow:5:10 --seed 0 --out results/ibm_fit.json
+```
+
+Each row retains input and snapshot hashes, controls, timing and either a routed
+resource count or an explicit width refusal. Every routed instruction is checked
+against the target, including coupling direction. These historical snapshots
+establish offline routing fit for the supplied cohort, not present-day device
+availability, noise tolerance or successful optimization. QPU and execution times
+remain unmeasured. Run under an outer wall-time/memory limit for larger studies.
 
 
 The same QUBO the annealer samples can be solved with a penalty-QAOA, written
