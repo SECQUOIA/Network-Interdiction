@@ -136,6 +136,26 @@ def test_lp_cli_records_bounds_gaps_and_plot_series(tmp_path):
     assert (tmp_path / 'lp_flow_reduction.pdf').stat().st_size > 0
 
 
+def test_all_solver_and_baseline_bars_do_not_overlap_adjacent_instances(tmp_path, monkeypatch):
+    bars = []
+    save = plot.plt.savefig
+    def capture(path):
+        bars.extend(plot.plt.gca().patches)
+        save(path)
+    monkeypatch.setattr(plot.plt, 'savefig', capture)
+    series = {name: [0.4, 0.7] for name in plot.SERIES_COLORS}
+    output = tmp_path / 'all_series.pdf'
+    plot.draw(series, ['first instance', 'second instance'], 'Flow reduction',
+              (0, 1.1), output)
+    assert len(bars) == 16
+    # Matplotlib emits one rectangle per instance for each series. Compare
+    # the actual rendered extents, independently of the position helper.
+    first_group, second_group = bars[::2], bars[1::2]
+    assert max(bar.get_x() + bar.get_width() for bar in first_group) < min(
+        bar.get_x() for bar in second_group)
+    assert output.stat().st_size > 0
+
+
 def test_lp_is_available_when_linear_qubo_penalty_has_no_strict_window():
     row = rb.run_case(str(ROOT / 'testcases/tiny_a.flow'), 3, 'auto',
                       'brute', ['sa'], baselines=['lp'])

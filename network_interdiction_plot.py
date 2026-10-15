@@ -156,8 +156,9 @@ def compute_series(frame, solvers, baselines=()):
 
 
 def grouped_bar_positions(num_groups, num_series):
-    """Left edges of each series' bars, plus the group centres for the ticks."""
-    base = np.arange(num_groups) * GROUP_STEP
+    """Bar centres and tick positions, with room for every optional series."""
+    group_step = max(GROUP_STEP, BAR_WIDTH * (num_series + 1))
+    base = np.arange(num_groups) * group_step
     positions = [base + i * BAR_WIDTH for i in range(num_series)]
     centres = base + BAR_WIDTH * (num_series - 1) / 2
     return positions, centres
@@ -182,7 +183,7 @@ def draw(series, x_labels, ylabel, ylim, out_path, reference_line=None):
     plt.xlabel('#Variables (#Interdicted Edges)', fontsize=20)
     plt.ylabel(ylabel, fontsize=20)
     plt.xticks(centres, x_labels, rotation=45)
-    plt.legend(prop={'size': 12}, loc='upper left', ncol=len(series),
+    plt.legend(prop={'size': 12}, loc='upper left', ncol=min(4, len(series)),
                fancybox=False, shadow=True)
     plt.tight_layout()
     plt.ylim(ylim)
