@@ -28,6 +28,9 @@ You'll also need:
   the `dwave-ocean-sdk`, or set the `DWAVE_API_TOKEN` env var. The `sa`
   (simulated annealing, `dwave-neal`) path needs no credentials and is what
   `main()` uses by default.
+- **A QCI token and separate SDK environment**, only for the optional `qci`
+  pass. Set `QCI_TOKEN` in your environment and `QCI_PYTHON` to that
+  environment's Python; see [Dirac-3 setup](#qci-dirac-3-bqm-backend) below.
 - **Julia is not required.** `solve_nip_qubo` and
   `solve_nip_qubo_repair_once_end` call out to a `nip_cubic.jl` script that
   isn't included in this repo, so those two functions are currently
@@ -49,6 +52,72 @@ python network_interdiction.py
 `main()` picks a test instance from [testcases/](testcases/), solves it
 exactly via Gurobi, then via the QUBO formulation + simulated annealing, and
 prints a comparison.
+
+## QCI Dirac-3 BQM backend
+
+[solve_qubo_via_qci.py](solve_qubo_via_qci.py) restores the missing QCI path
+against the same `dimod.BinaryQuadraticModel` used by SA/QA. The current
+[qci-client SDK](https://quantumcomputinginc.com/learn/module/introduction-to-dirac-3/qci-client-software-package/v5.0.3/modules/qci-client/optimization/client)
+requires `networkx<3`, while this project requires `networkx>=3.2`. Keep the
+SDK in a separate environment rather than overriding either constraint:
+
+```bash
+uv venv .venv-qci --python 3.12
+uv pip install --python .venv-qci/bin/python -r requirements-qci.txt
+export QCI_PYTHON="$PWD/.venv-qci/bin/python"
+```
+
+Set `QCI_TOKEN` using your usual credential management. The SDK reads it
+from the environment; it is never placed in command arguments, request files,
+CSV provenance or diagnostic messages. `QCI_API_URL` optionally overrides
+the SDK's default service URL. The core environment sends coefficient JSON
+to [qci_worker.py](qci_worker.py) through stdin, then receives samples and a
+job receipt through stdout. The SDK is pinned to 5.0.3 and tested in its own
+CI job; it is not a core dependency.
+
+The [Dirac-3 integer protocol](https://quantumcomputinginc.com/learn/module/introduction-to-dirac-3/dirac-3-developer-beginner-guide)
+with `num_levels=[2,...,2]` represents binary variables. Each BQM linear or
+quadratic coefficient appears once in the one-based polynomial encoding;
+the constant offset stays local. Returned samples must be binary, correctly
+sized, and have positive occurrence counts summing to the requested sample
+count. Energies are recomputed using the original BQM, including its offset.
+No continuous relaxation, rounding of fractional samples or classical descent
+is hidden in this backend.
+
+This command **submits a hardware job** (it is an example, not a saved run):
+
+```bash
+python run_benchmark.py --exact brute --solvers qci \
+    --case testcases/tiny_a.flow:1:auto --qci-samples 20 \
+    --qci-relaxation-schedule 1 --qci-timeout 300 --out results/qci.csv
+```
+
+The `QCI_NIP`, `QCI_NIP_Greedy`, `QCI_QUBO` and `QCI_*` sample diagnostics
+use the same exact reference, best-at-most-20-record selection and repair
+as SA. All QCI columns stay empty when the pass is unselected or the strict
+lambda window is empty. Measured zeros remain zero. QCI columns are available
+in the CSV; the existing plotting script still displays its SA/QA series.
+`QCI_time_sec` includes worker startup, authentication, upload, queue and result
+retrieval; `QCI_repair_time_sec` covers diagnostics and repair. Both exclude
+building the BQM and the exact-reference calculation. `QCI_device_usage_sec`
+is the vendor's rounded **billable** usage, not precise QPU execution time,
+and remains empty if the service omits it. Job ID, device and SDK version
+are retained. QCI does not expose a reproducibility seed here.
+
+The worker submits once with no automatic job resubmission. On timeout it stops waiting,
+without cancelling the remote job, and reports its ID if the submission receipt
+arrived. A failure before that receipt can have an unknown submission outcome;
+inspect the QCI account before submitting again. HTTP request attempts use a 30-second
+timeout and `--qci-timeout` bounds the entire worker, including startup/upload.
+The local limit of 474 binary variables follows the cloud guide's 949-level
+limit, and samples are limited to 1..100. These are input guards, not measured
+hardware capacity. Empty/constant objectives and SPIN BQMs are rejected locally.
+
+Validation uses exhaustive binary energy comparisons, offline benchmark scoring,
+and the actual SDK serializer/job builder with HTTP forbidden. No QCI job was
+submitted in this work. Largest successfully solved hardware instance and QPU
+execution-time measurements remain unmeasured; simulator integration and device
+resource studies continue under #17/#4/#14.
 
 ## Decomposition into smaller QUBOs
 

@@ -26,6 +26,16 @@ SA_NIP_Greedy   same, after improve_dwave_solution() repairs each sample to
                 exactly B interdicted edges
 SA_QUBO         lowest QUBO energy the annealer reached
 QA_*            the same three columns for the D-Wave QPU path
+QCI_NIP, QCI_NIP_Greedy, QCI_QUBO
+                corresponding Dirac-3 binary-mode columns; optional QCI_*
+                record diagnostics follow the same <=20-record protocol
+QCI_time_sec    worker startup, authentication, upload, queue and sampling wall
+                time; QCI_repair_time_sec measures diagnostics and greedy repair
+QCI_device_usage_sec
+                vendor-reported rounded billable device usage, NOT precise
+                execution/QPU time; empty when unavailable or QCI not run
+QCI_job_id, QCI_device, QCI_client_version
+                identifies the actual submitted job, device and isolated SDK
 SA_raw_feasible_count, QA_raw_feasible_count
                 budget-feasible records among <=20 lowest-energy raw samples;
                 *_raw_samples_examined is the actual denominator
@@ -154,6 +164,7 @@ SOLVER_COLUMNS = {
     'sa': ('SA_NIP', 'SA_NIP_Greedy', 'SA_QUBO'),
     'qa': ('QA_NIP(advantage1)', 'QA_NIP(advantage1)_Greedy',
            'QA_QUBO(advantage1)'),
+    'qci': ('QCI_NIP', 'QCI_NIP_Greedy', 'QCI_QUBO'),
 }
 
 # Classical baseline passes -> the column each fills. Kept out of
@@ -166,7 +177,10 @@ BASELINE_COLUMNS = {
 
 # Wall time per method, and Gurobi's incumbent trajectory (last: it is long).
 TIME_COLUMNS = ['Gurobi_time_sec', 'SA_time_sec', 'SA_repair_time_sec',
-                'Greedy_time_sec', 'Random_Greedy_time_sec']
+                'Greedy_time_sec', 'Random_Greedy_time_sec',
+                'QCI_time_sec', 'QCI_repair_time_sec']
+QCI_METADATA_COLUMNS = ['QCI_device_usage_sec', 'QCI_job_id', 'QCI_device',
+                        'QCI_client_version']
 TRAJECTORY_COLUMN = 'Gurobi_trajectory'
 SAMPLE_FIELDS = ['raw_feasible_count', 'raw_samples_examined', 'raw_samples',
                  'pre_greedy_feasible_count', 'pre_greedy_samples_examined',
@@ -175,7 +189,8 @@ SAMPLE_COLUMNS = [f'{solver.upper()}_{field}'
                   for solver in SOLVER_COLUMNS for field in SAMPLE_FIELDS]
 
 CSV_COLUMNS = CSV_COLUMNS[:-1] + list(BASELINE_COLUMNS.values()) + \
-    CSV_COLUMNS[-1:] + TIME_COLUMNS + SAMPLE_COLUMNS + [TRAJECTORY_COLUMN]
+    CSV_COLUMNS[-1:] + list(SOLVER_COLUMNS['qci']) + TIME_COLUMNS + \
+    SAMPLE_COLUMNS + QCI_METADATA_COLUMNS + [TRAJECTORY_COLUMN]
 
 DEFAULT_MAX_EXACT_VARS = 24
 
@@ -387,7 +402,8 @@ def gurobi_trajectory(di_g, src_node, tgt_node, B, threads):
 
 def run_case(instance, B, curr_λ, exact_backend, solvers,
              max_exact_vars=DEFAULT_MAX_EXACT_VARS, baselines=(), rng=None,
-             sa_seed=None, gurobi_threads=ni.DEFAULT_GUROBI_THREADS):
+             sa_seed=None, gurobi_threads=ni.DEFAULT_GUROBI_THREADS,
+             qci_options=None):
     """
     Compute one CSV row. `instance` is a path to a flow file; `curr_λ` is a
     float or 'auto' (pick it from the exact window, see the module
@@ -437,12 +453,20 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
         row.update({'Gurobi_time_sec': runtime, TRAJECTORY_COLUMN: trajectory})
 
     for solver in solvers:
+        options = {'qci_options': qci_options} if solver == 'qci' else {}
         result = ni.qubo_verify_parameters(
             str(instance), di_g, curr_λ, src_node, tgt_node, B, solver=solver,
-            seed=sa_seed)
+            seed=sa_seed, **options)
         if solver == 'sa':
             row['SA_time_sec'] = result['sample_time_sec']
             row['SA_repair_time_sec'] = result['postprocess_time_sec']
+        if solver == 'qci':
+            row['QCI_time_sec'] = result['sample_time_sec']
+            row['QCI_repair_time_sec'] = result['postprocess_time_sec']
+            info = result['sampler_info']
+            for field in QCI_METADATA_COLUMNS:
+                value = info.get(field.lower())
+                row[field] = '' if value is None else value
         nip_col, greedy_col, qubo_col = SOLVER_COLUMNS[solver]
         before = result['best_obj_before_greedy']
         # inf means not one of the 20 best samples stayed inside the budget.
@@ -497,7 +521,7 @@ def parse_solvers(spec):
     for solver in solvers:
         if solver not in SOLVER_COLUMNS:
             raise argparse.ArgumentTypeError(
-                f"unknown solver {solver!r}, expected sa and/or qa")
+                f"unknown solver {solver!r}, expected one of {tuple(SOLVER_COLUMNS)}")
     return solvers
 
 
@@ -552,12 +576,18 @@ def provenance_lines(args, solvers, baselines, rows=()):
     ]
     if 'sa' in solvers:
         lines.append(f"simulated annealing seed: {args.seed}")
+    if 'qci' in solvers:
+        lines.append(f"QCI Dirac-3 binary integer mode; samples: {args.qci_samples}; "
+                     f"relaxation schedule: {args.qci_relaxation_schedule}; "
+                     f"worker timeout: {args.qci_timeout} seconds; no automatic job resubmission")
+        lines.append('QCI_time_sec includes worker startup/authentication/upload/queue/results; '
+                     'QCI_device_usage_sec is rounded billable usage, not precise QPU time')
     if solvers:
         lines.append('raw feasibility counts budget-feasible SampleSet records among '
                      'the <=20 lowest-energy raw records, not occurrence-weighted reads; '
                      'the examined denominator and record diagnostics are retained')
         lines.append('pre_greedy diagnostics describe the repair input pool; '
-                     'QA includes classical steepest descent, SA equals raw')
+                     'QA includes classical steepest descent, SA/QCI equal raw')
     if args.exact == 'gurobi':
         lines.append(f"Gurobi trajectory solve threads: {args.gurobi_threads}")
     if any(case[2] == 'auto' for case in args.cases):
@@ -603,9 +633,17 @@ def main(argv=None):
         '--exact', choices=['gurobi', 'brute'], default='gurobi',
         help='backend for the Opt_NIP/Opt_QUBO columns (default: gurobi)')
     parser.add_argument(
-        '--solvers', type=parse_solvers, default='sa', metavar='sa[,qa]',
-        help="annealing passes to run: 'sa', 'qa', 'sa,qa' or 'none' "
+        '--solvers', type=parse_solvers, default='sa', metavar='sa[,qa,qci]',
+        help="comma-separated passes from 'sa', 'qa', 'qci', or 'none' "
              '(default: sa)')
+    parser.add_argument('--qci-python', help='Python executable in the separate QCI '
+                        'environment (default: QCI_PYTHON environment variable)')
+    parser.add_argument('--qci-samples', type=int, default=20,
+                        help='Dirac-3 samples, 1..100 (default: 20)')
+    parser.add_argument('--qci-relaxation-schedule', type=int, choices=[1, 2, 3, 4],
+                        default=1, help='Dirac-3 relaxation schedule (default: 1)')
+    parser.add_argument('--qci-timeout', type=float, default=300,
+                        help='worker wall-time limit in seconds; does not cancel a remote job')
     parser.add_argument(
         '--baselines', type=parse_baselines, default='greedy,random',
         metavar='greedy[,random]',
@@ -629,6 +667,12 @@ def main(argv=None):
 
     solvers = args.solvers if isinstance(args.solvers, list) else \
         parse_solvers(args.solvers)
+    if 'qci' in solvers and (not 1 <= args.qci_samples <= 100
+                            or not math.isfinite(args.qci_timeout) or args.qci_timeout <= 0):
+        parser.error('QCI samples must be in 1..100 and timeout must be finite and positive')
+    qci_options = dict(python_executable=args.qci_python, num_samples=args.qci_samples,
+                       relaxation_schedule=args.qci_relaxation_schedule,
+                       timeout_sec=args.qci_timeout)
     baselines = args.baselines if isinstance(args.baselines, list) else \
         parse_baselines(args.baselines)
     # One generator for the whole run, so a CSV is reproducible from its
@@ -641,7 +685,8 @@ def main(argv=None):
         rows.append(run_case(instance, B, curr_λ, args.exact, solvers,
                              args.max_exact_vars, baselines, rng,
                              sa_seed=args.seed,
-                             gurobi_threads=args.gurobi_threads))
+                             gurobi_threads=args.gurobi_threads,
+                             qci_options=qci_options))
 
     write_csv(args.out, rows,
               provenance_lines(args, solvers, baselines, rows))

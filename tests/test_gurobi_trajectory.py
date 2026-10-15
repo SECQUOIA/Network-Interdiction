@@ -70,8 +70,10 @@ def test_run_case_records_times_and_a_consistent_trajectory():
     require_gurobi()
     row = rb.run_case(tiny('tiny_b'), 2, 'auto', 'gurobi', solvers=['sa'],
                       baselines=['greedy', 'random'], sa_seed=0)
-    for column in rb.TIME_COLUMNS:
+    for column in ('Gurobi_time_sec', 'SA_time_sec', 'SA_repair_time_sec',
+                   'Greedy_time_sec', 'Random_Greedy_time_sec'):
         assert isinstance(row[column], float) and row[column] >= 0, column
+    assert row['QCI_time_sec'] == row['QCI_repair_time_sec'] == ''
     trajectory = json.loads(row[rb.TRAJECTORY_COLUMN])
     assert min(flow for _, flow in trajectory) == row['Opt_NIP']
 
