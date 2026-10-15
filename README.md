@@ -358,6 +358,24 @@ records from which to recover them. They remain unchanged. The original QA
 CSVs are still missing under #18; adding this instrumentation does not recover
 those runs, and no hardware rerun was performed.
 
+[results/raw_feasibility_sa.csv](results/raw_feasibility_sa.csv) is a fresh,
+single-seed SA sample on three of those existing cases, with the selected
+records retained. Its [manifest](results/raw_feasibility_sa.json) pins the
+producing source, input hashes, versions, command and resource limits.
+
+| Instance (budget) | Raw budget-feasible / examined | Best feasible raw flow | Flow after repair |
+| --- | ---: | ---: | ---: |
+| `50.planarflow` (5) | 20 / 20 | 311 | 311 |
+| `50_0.15.erdosflow` (5) | 20 / 20 | 393 | 393 |
+| `50_5.2dnnflow` (4) | 0 / 20 | unavailable | 326 |
+
+The last case illustrates why a count is useful: none of the selected raw
+records respects the budget, even though repair produces a feasible result.
+These three single runs validate the instrumentation; they do not establish
+a size trend or reproduce the historical D-Wave experiments. All QA columns
+remain empty. Audits independently recompute all 60 saved cuts' flows and
+budget-feasibility flags.
+
 ### Regenerating the results CSV
 
 The sample is reproducible on any machine, with no Gurobi license and no
