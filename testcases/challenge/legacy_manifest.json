@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "name": "75.planarflow",
+      "family": "planar",
+      "file": "../75.planarflow",
+      "sha256": "a9903438795d39649829e5c80005d18f6c0042f4299207a0b6d9cd1a5b648146",
+      "budgets": [
+        3,
+        6
+      ],
+      "interdictable": null
+    },
+    {
+      "name": "125.planarflow",
+      "family": "planar",
+      "file": "../125.planarflow",
+      "sha256": "04920fe0100dec13b6de11a1b45f14feb1cde89f0b925300c3a1f1a18e2fb16e",
+      "budgets": [
+        3,
+        6
+      ],
+      "interdictable": null
+    },
+    {
+      "name": "150.planarflow",
+      "family": "planar",
+      "file": "../150.planarflow",
+      "sha256": "212fc912c23be0f8beacf98aea3f3b8955b05227ff51a22ab25ce5c575e386bc",
+      "budgets": [
+        3,
+        6
+      ],
+      "interdictable": null
+    },
+    {
+      "name": "70_0.1.erdosflow",
+      "family": "erdos",
+      "file": "../70_0.1.erdosflow",
+      "sha256": "7a8df2629363299cb88096306231a77c5d0eef7826d04ae76f96e33308f97ab1",
+      "budgets": [
+        3,
+        6
+      ],
+      "interdictable": null
+    },
+    {
+      "name": "90_0.1.erdosflow",
+      "family": "erdos",
+      "file": "../90_0.1.erdosflow",
+      "sha256": "6fd767d947352d8710d839a5df7e2e357d6cdf6410eda6386b431aa2df855ad6",
+      "budgets": [
+        3,
+        6
+      ],
+      "interdictable": null
+    },
+    {
+      "name": "75_6.2dnnflow",
+      "family": "knn",
+      "file": "../75_6.2dnnflow",
+      "sha256": "a2fa6742872b61087526c4d8594cac198ed6fda7cf54369365fa68cc23228c55",
+      "budgets": [
+        3,
+        6
+      ],
+      "interdictable": null
+    },
+    {
+      "name": "100_6.2dnnflow",
+      "family": "knn",
+      "file": "../100_6.2dnnflow",
+      "sha256": "e3795f7b55f00d000d4447ffc0aeae95fbc126a5d269c53eb72d8b43b51304cb",
+      "budgets": [
+        3,
+        6
+      ],
+      "interdictable": null
+    },
+    {
+      "name": "100_7.2dnnflow",
+      "family": "knn",
+      "file": "../100_7.2dnnflow",
+      "sha256": "185d6d6d70fef0961b9c379439f531c1538883783534d1116e961b309b62d838",
+      "budgets": [
+        3,
+        6
+      ],
+      "interdictable": null
+    }
+  ]
+}

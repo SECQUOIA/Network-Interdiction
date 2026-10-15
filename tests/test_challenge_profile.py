@@ -44,6 +44,7 @@ def test_power_uses_rateA_and_excludes_inactive_branch():
 
 def test_conversion_regenerates_all_flow_bytes_and_manifest(tmp_path):
     ci.generate(tmp_path)
+    assert (tmp_path / 'legacy_manifest.json').read_bytes() == (ci.DATA / 'legacy_manifest.json').read_bytes()
     expected = json.loads((ci.DATA / 'manifest.json').read_text())
     assert json.loads((tmp_path / 'manifest.json').read_text()) == expected
     for case in expected['cases']:

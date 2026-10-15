@@ -176,6 +176,19 @@ def generate(destination):
         cases.append({'name': name, 'family': family, 'file': '../' + name,
                       'sha256': digest(path), 'budgets': [3, 6], 'interdictable': None})
     (destination / 'manifest.json').write_text(json.dumps({'schema': 1, 'cases': cases}, indent=2) + '\n')
+    # Separate bounded continuation covers every remaining large .flow input.
+    legacy = []
+    for family, names in [
+            ('planar', ['75.planarflow', '125.planarflow', '150.planarflow']),
+            ('erdos', ['70_0.1.erdosflow', '90_0.1.erdosflow']),
+            ('knn', ['75_6.2dnnflow', '100_6.2dnnflow', '100_7.2dnnflow'])]:
+        for name in names:
+            path = ROOT / 'testcases' / name
+            legacy.append({'name': name, 'family': family, 'file': '../' + name,
+                           'sha256': digest(path), 'budgets': [3, 6], 'interdictable': None})
+    (destination / 'legacy_manifest.json').write_text(
+        json.dumps({'schema': 1, 'cases': legacy}, indent=2) + '\n')
+
 
 
 def load_cases(manifest=DATA / 'manifest.json'):
