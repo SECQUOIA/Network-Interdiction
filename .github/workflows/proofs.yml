@@ -1,0 +1,33 @@
+name: penalty proofs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LEAN_NUM_THREADS: '2'
+      LEAN_STACK_SIZE_KB: '16384'
+      LEAN_IMPORT_WORKERS: '2'
+      MATHLIB_NO_CACHE_ON_UPDATE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leanprover/lean-action@24581d74d674803a25a81b10b059c5c0cdd344c6 # v1
+        with:
+          lake-package-directory: proofs
+          auto-config: 'false'
+          build: 'false'
+          use-mathlib-cache: 'false'
+      - name: Fetch only the required mathlib artifacts
+        working-directory: proofs
+        run: lake exe cache get Mathlib.Basic.Real.Basic Mathlib.Tactic.Linarith Mathlib.Tactic.NormNum
+      - name: Check the proofs and their axiom dependencies
+        working-directory: proofs
+        run: lake --wfail build
