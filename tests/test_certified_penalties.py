@@ -117,6 +117,18 @@ def test_zero_capacities_and_no_interdictable_arcs():
     assert best.sample['x_0'] == 1
 
 
+@pytest.mark.parametrize('numpy_capacity', [False, True])
+@pytest.mark.parametrize('numpy_budget', [False, True])
+def test_constant_model_accepts_numpy_integral_inputs(numpy_capacity, numpy_budget):
+    import numpy as np
+    g = nx.DiGraph()
+    g.add_weighted_edges_from([(0, 1, np.int64(3) if numpy_capacity else 3)])
+    budget = np.int64(0) if numpy_budget else 0
+    bqm, cert = cp.certified_squared_qubo(budget, g, 0, 1, [])
+    assert bqm.num_variables == 0
+    assert bqm.energy({}) == cert.objective_upper_bound == 3
+
+
 def test_comparison_size_guard_precedes_compilation(tmp_path, monkeypatch):
     import run_penalty_comparison as comparison
     path = tmp_path / 'large.flow'

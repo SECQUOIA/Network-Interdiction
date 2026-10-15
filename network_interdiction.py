@@ -10,6 +10,7 @@ import solve_qubo_via_dwave
 import random
 import time
 from pyqubo import Binary
+from numbers import Real
 
 DEFAULT_GUROBI_THREADS = 8
 
@@ -1172,7 +1173,7 @@ def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_pen
         obj += di_g[u][v]['weight'] * (1 - var_x[i]) * var_gamma[i]
         obj += dual_penalty_coeff * (temp_pi_u - temp_pi_u * temp_pi_v - temp_pi_u * var_gamma[i] + var_w[i] * (temp_pi_u + temp_pi_v + var_gamma[i] - 1) + (temp_pi_u * temp_pi_v + temp_pi_u * var_gamma[i] + temp_pi_v * var_gamma[i]) - (temp_pi_u + temp_pi_v + var_gamma[i]))
 
-    if isinstance(obj, (int, float)):
+    if isinstance(obj, Real):
         return dimod.BinaryQuadraticModel({}, {}, float(obj), dimod.BINARY)
     model = obj.compile()
     bqm = model.to_bqm()
