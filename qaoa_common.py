@@ -128,14 +128,16 @@ def rcm_order(bqm):
     variable_order(), one p = 1 evaluation of a 78-qubit instance had not
     finished after ten minutes; in this order a 40-qubit k-NN instance takes
     0.1 s, and a 53-qubit planar one 4.5 s with the bond dimension capped at
-    64. The order is deterministic (nodes are added in variable_order(),
-    which breaks the heuristic's ties).
+    64. The order is deterministic across Python hash seeds: the traversal
+    uses stable integer node IDs instead of randomized string hashes.
     """
+    variables = variable_order(bqm)
+    position = {label: i for i, label in enumerate(variables)}
     graph = nx.Graph()
-    graph.add_nodes_from(variable_order(bqm))
-    graph.add_edges_from(sorted(bqm.quadratic, key=lambda pair: tuple(
-        sorted(map(_family_key, pair)))))
-    return list(nx.utils.reverse_cuthill_mckee_ordering(graph))
+    graph.add_nodes_from(range(len(variables)))
+    graph.add_edges_from(sorted(
+        tuple(sorted((position[u], position[v]))) for u, v in bqm.quadratic))
+    return [variables[i] for i in nx.utils.reverse_cuthill_mckee_ordering(graph)]
 
 
 def ising_from_bqm(bqm, variables):
@@ -358,15 +360,25 @@ def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
     if order not in QUBIT_ORDERS:
         raise ValueError(f'unknown qubit order {order!r}, expected one of '
                          f'{QUBIT_ORDERS}')
+    # Enforce the simulation limit before the combinatorial reference scan.
+    # Compile with positive placeholder penalties to count the actual QUBO
+    # variables, including auxiliaries, without first solving for lambda.
+    if interdictable is not None:
+        interdictable = frozenset(interdictable)
+        if not interdictable.issubset(di_g.edges):
+            raise ValueError('interdictable contains an arc outside the graph')
+        if not 0 <= B <= len(interdictable):
+            raise ValueError('piece budget exceeds its interdictable arcs')
+    sizing_bqm = ni.nip_to_qubo(B, di_g, src_node, tgt_node, 1.0, 2.0,
+                               interdictable=interdictable)
+    if len(sizing_bqm.variables) > max_qubits:
+        raise ValueError(
+            f'{instance} B={B}: the QUBO has {len(sizing_bqm.variables)} variables, '
+            f'over the statevector limit of {max_qubits} qubits')
     with contextlib.redirect_stdout(io.StringIO()):  # Gurobi prints every solve
         if interdictable is None:
             curve = rb.optimum_curve(exact_backend, di_g, src_node, tgt_node, B)
         else:
-            interdictable = frozenset(interdictable)
-            if not interdictable.issubset(di_g.edges):
-                raise ValueError('interdictable contains an arc outside the graph')
-            if not 0 <= B <= len(interdictable):
-                raise ValueError('piece budget exceeds its interdictable arcs')
             curve = restricted_optimum_curve(
                 di_g, src_node, tgt_node, interdictable, exact_backend)
     lo, hi = rb.lambda_window(curve, B)
@@ -378,9 +390,11 @@ def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
                 f'interior, so no lambda makes the QUBO ground state the '
                 f'optimal interdiction (issue #2)')
     lam = float(lam)
+    if not math.isfinite(lam) or not lo < lam < hi:
+        raise ValueError(
+            f'{instance} B={B}: lambda={lam} is outside the window '
+            f'({lo}, {hi}); a finite, strictly interior value is required')
 
-    if interdictable is not None and not lo < lam < hi:
-        raise ValueError(f'lambda={lam} is outside the window ({lo}, {hi})')
     bqm = ni.nip_to_qubo(B, di_g, src_node, tgt_node, lam, lam + 1,
                         interdictable=interdictable)
     if len(bqm.variables) > max_qubits:
@@ -396,13 +410,14 @@ def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
         interdictable=interdictable)
 
     if problem.exact:
-        ground = int(np.argmin(problem.energies()))
-        if not problem.optimal_mask()[ground]:
+        energies = problem.energies()
+        ground = energies <= energies.min() + ENERGY_TOL
+        if not np.all(problem.optimal_mask()[ground]):
             raise ValueError(
                 f'{instance} B={B}: lambda={lam} is outside the window '
                 f'({lo}, {hi}); the QUBO ground state is not an optimal '
                 f'interdiction')
-        problem.ground_energy = float(problem.energies()[ground])
+        problem.ground_energy = float(energies.min())
     elif interdictable is not None:
         # Strictly inside the restricted window, every ground state has B
         # interdictions. The budget term is then zero and beta > lambda
@@ -506,7 +521,9 @@ def score_samples(problem, counts, num_repaired=REPAIRED_SAMPLES):
                             (maxflow - flow) / (maxflow - opt_nip), the
                             measure the rest of the repository scores
                             methods by (1 = optimal), with over-budget shots
-                            scoring 0; no repair
+                            scoring 0; no repair. If no reduction is
+                            possible (for example B = 0), an optimal
+                            feasible shot scores 1 and other shots score 0.
 
     `counts` maps per-qubit bit tuples to shot counts.
     """

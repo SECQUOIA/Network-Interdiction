@@ -131,6 +131,23 @@ def test_a_lambda_outside_the_window_is_refused():
         qc.build_problem(TINY_A, 1, lam=1.0)
 
 
+@pytest.mark.parametrize('lam', [5.0, 10.0, float('nan'), float('inf')])
+def test_lambda_must_be_finite_and_strictly_inside_window(lam):
+    # At the lower endpoint half the ground states cut two arcs for B=1.
+    with pytest.raises(ValueError, match='outside the window'):
+        qc.build_problem(TINY_A, 1, lam=lam)
+
+
+def test_oversized_problem_is_rejected_before_exact_search(monkeypatch):
+    def unexpected_search(*args, **kwargs):
+        pytest.fail('oversized input reached exhaustive reference search')
+
+    monkeypatch.setattr(qc.rb, 'optimum_curve', unexpected_search)
+    instance = os.path.join(REPO_ROOT, 'testcases', '50.planarflow')
+    with pytest.raises(ValueError, match='statevector limit'):
+        qc.build_problem(instance, 10)
+
+
 def bits_for(problem, x):
     """Per-qubit bits with the given x bits and every other variable 0."""
     bits = [0] * problem.num_qubits

@@ -281,6 +281,14 @@ the clean source commit and command. The simulations are approximate and
 the instances are already solved optimally by greedy, so these rows show
 simulator reach and angle-transfer behavior rather than a quantum advantage.
 
+The saved `qaoa_mid.csv` predates the deterministic RCM-order fix and did
+not record its variable permutation. Its original approximate energies and
+timings are historical measurements; they are not exactly reproducible from
+the seed alone, since Python hash randomization affected the old ordering.
+New runs use stable integer labels for RCM and record the actual `variables`
+order and framework versions. Regenerate into a separate file when comparing
+new results; the historical CSV is retained unchanged.
+
 ## Benchmark results and plots
 
 [network_interdiction_plot.py](network_interdiction_plot.py) draws the two
