@@ -44,6 +44,8 @@ SOLVERS = {
 BASELINES = {
     'Greedy': 'Greedy',
     'Random-Greedy': 'Random_Greedy',
+    'LP-Round-Repair': 'LP_Round_Repair',
+    'Lagrangian-Feasible': 'Lagrangian_Feasible',
 }
 
 # Plotting order, and the colour each series has always been drawn in.
@@ -57,6 +59,8 @@ SERIES_COLORS = {
     'SA-Greedy': '#ff3b30',
     'Greedy': '#2c2f33',
     'Random-Greedy': '#ffcc00',
+    'LP-Round-Repair': '#8e44ad',
+    'Lagrangian-Feasible': '#16a085',
 }
 
 BAR_WIDTH = 0.25

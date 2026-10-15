@@ -182,7 +182,22 @@ def create_random_erdos_renyi_graphs(n, p, seed=42):
     file_to_write.close()
 
 # add the knapsack constraint to objective
-def solve_nip_gurobi_relaxation(G, src_node, tgt_node, B, λ_min, λ_max):
+def solve_nip_gurobi_relaxation(G, src_node, tgt_node, B, λ_min, λ_max,
+                               max_iterations=100):
+    """Binary Lagrangian search, returning every iterate's solver lower bound.
+
+    This is not a continuous LP relaxation. For each nonnegative lambda,
+    L(lambda) = min_x flow(x) + lambda*(|x|-B) <= optimal budgeted flow.
+    ObjBound is the global lower bound for that minimization (subject to
+    Gurobi tolerances); an over-budget incumbent is never an upper bound.
+    The existing midpoint search is a heuristic for choosing multipliers,
+    not a proof that its best lower bound equals the budgeted optimum.
+    """
+    if (not np.isfinite([λ_min, λ_max]).all()
+            or not 0 <= λ_min <= λ_max):
+        raise ValueError('lambda interval must be finite and nonnegative')
+    if not isinstance(max_iterations, int) or max_iterations < 1:
+        raise ValueError('max_iterations must be positive')
     def compute_objective(di_g, x):
         di_g_copy = di_g.copy()
         edge_counter = 0
@@ -200,11 +215,14 @@ def solve_nip_gurobi_relaxation(G, src_node, tgt_node, B, λ_min, λ_max):
     list_of_λs = []
     num_of_iterations_without_improvement = 0
     curr_ite = 0
+    history = []
+    lower_bound = 0.0
 
 
-    while not finished and num_of_iterations_without_improvement < 5:
+    while (not finished and num_of_iterations_without_improvement < 5
+           and curr_ite < max_iterations):
         curr_ite += 1
-        curr_λ = round((λ_min + λ_max)/2, 2)
+        curr_λ = (λ_min + λ_max) / 2
         list_of_λs.append(curr_λ)
 
         if len(list_of_λs) > 5:
@@ -234,13 +252,20 @@ def solve_nip_gurobi_relaxation(G, src_node, tgt_node, B, λ_min, λ_max):
 
         # Solve the model
         m.optimize()
+        if m.Status != GRB.OPTIMAL:
+            raise RuntimeError('Lagrangian solve did not reach optimality')
+        lower_bound = max(lower_bound, float(m.ObjBound))
 
         x_vals = []
         for e in G.edges():
-            x_vals.append(x[e].X)
+            x_vals.append(int(x[e].X > 0.5))
         
         num_interdicted_edge = sum(x_vals)
         curr_obj = compute_objective(G, x_vals)
+        history.append({'lambda': curr_λ, 'lower_bound': float(m.ObjBound),
+                        'objective': float(m.ObjVal),
+                        'num_interdicted': num_interdicted_edge,
+                        'surviving_flow': float(curr_obj)})
 
         print(f'Iteration {curr_ite}, Current lambda is {curr_λ}, Number of interdicted edges is {num_interdicted_edge}, Current objective is {curr_obj}')
 
@@ -251,6 +276,7 @@ def solve_nip_gurobi_relaxation(G, src_node, tgt_node, B, λ_min, λ_max):
             else:
                 num_of_iterations_without_improvement = 0 # reset counter
                 best_obj = curr_obj
+                best_sol = [edge for edge, bit in zip(G.edges(), x_vals) if bit]
         else:
             num_of_iterations_without_improvement = 0
             λ_min = curr_λ #discard the left half of the lambda interval
@@ -260,6 +286,9 @@ def solve_nip_gurobi_relaxation(G, src_node, tgt_node, B, λ_min, λ_max):
 
     print('-------------------')
     print(f'Best obj is {best_obj}')
+    return {'lower_bound': lower_bound,
+            'feasible_flow': None if not np.isfinite(best_obj) else float(best_obj),
+            'interdicted_edges': best_sol, 'iterations': history}
 
 # add dual constraint to the objective
 def gurobi_verify_parameters(G, src_node, tgt_node, B, λ, β):
