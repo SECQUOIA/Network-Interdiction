@@ -1,0 +1,13 @@
+{
+  "source_commit": "6c1a510b4f228012b16f98199f547383a285b1ab",
+  "report_sha256": "0c679c451b97c3aff367dee7d2e39fe6dd7fcc32715a95b4f0266ecc1a3ff3c4",
+  "campaign": "20-case,2-topology,2-seed bounded search",
+  "attempts": 1,
+  "minorminer_calls": 80,
+  "timeout_per_call_sec": 5,
+  "tries": 1,
+  "outer_timeout_sec": 600,
+  "virtual_memory_limit_gib": 8,
+  "numerical_threads": 1,
+  "scope": "52 valid mappings,28 heuristic search failures; no hardware or infeasibility claim for failures. Follow-up longer searches are retained separately."
+}

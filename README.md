@@ -40,6 +40,34 @@ This tool retains the existing `dwave-networkx` generator because its replacemen
 `dwave-graphs`, currently requires NumPy 2, incompatible with the repository's
 PyQUBO NumPy<2 requirement. No dependency constraints are overridden.
 
+The [saved 20-case study](results/embedding_resources.json) and its
+[manifest](results/embedding_resources.manifest.json) retain 80 attempts:
+two topologies and seeds 0/1, five seconds per call. All 52 tiny/medium attempts
+succeed; all 28 larger-case attempts exhaust their search without a mapping.
+The largest fitted case in that first cohort is the 149-variable medium ER
+instance: 159–160 physical qubits on P16 and 153–157 on Z12.
+
+A separate [30-second follow-up](results/embedding_large_resources.json)
+([manifest](results/embedding_large_resources.manifest.json)) preserves the
+earlier failures and makes one seed-0 attempt per 50-node family/topology:
+
+| Case (budget) | Logical variables | P16 physical qubits / max chain / seconds | Z12 physical qubits / max chain / seconds |
+| --- | ---: | --- | --- |
+| `50.planarflow` (5) | 912 | 1192 / 20 / 19.43 | 1288 / 20 / 10.13 |
+| `50_0.15.erdosflow` (5) | 1122 | Not found / — / 30.49 | 1685 / 20 / 13.88 |
+| `50_5.2dnnflow` (4) | 1068 | Not found / — / 30.44 | 1370 / 12 / 10.19 |
+
+The successful 50-node mappings use 1.28–1.50 physical qubits per logical
+variable. All 56 retained mappings across both studies also pass Ocean's
+separate embedding verifier. The longer searches demonstrate why a failed
+heuristic search must not be described as a size limit. They do not imply that
+the two remaining P16 cases cannot embed. No larger-budget attempts were made
+on the 70/75/125-node cases. The first and follow-up campaigns each completed
+once within their respective 600-/240-second outer limits and 8-GiB memory
+limits. Numerical libraries and minorminer used one thread. These are
+single/two-seed observations with different completed work, not a statistical
+comparison or an exact-repeatability claim across search budgets.
+
 ## Setup
 
 ```
