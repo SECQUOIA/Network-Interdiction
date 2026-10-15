@@ -15,6 +15,14 @@ You'll also need:
   tiny models; anything past a few hundred variables/constraints needs a
   real license (academic licenses are free — see
   [Gurobi's site](https://www.gurobi.com/academia/academic-program-and-licenses/)).
+  All production Gurobi models explicitly use eight threads by default,
+  including exact references, penalty checks, Lagrangian solves, and pieces.
+  The timed trajectory solver also defaults to eight; its
+  `--gurobi-threads` option can override that dedicated solve. Thread count
+  is recorded in benchmark headers. Earlier saved timing results retain
+  their original settings and must not be mixed with an eight-thread rerun.
+  NetworkX partitioning, contraction, and max-flow calculations are separate
+  from Gurobi and remain serial.
 - **A D-Wave Leap API token** for the `qa` (real QPU) solver path in
   [solve_qubo_via_dwave.py](solve_qubo_via_dwave.py) — run `dwave setup` from
   the `dwave-ocean-sdk`, or set the `DWAVE_API_TOKEN` env var. The `sa`
@@ -71,8 +79,27 @@ fixed before any piece is solved. Two limits to know:
   QUBOs are smaller only by the three variables of each arc they do not own.
 
 `solve_decomposed()` solves the pieces sequentially (each seeing what earlier
-pieces cut) or independently, with `brute_force_piece_solver` for small
-pieces or `qubo_piece_solver(lambda)` for the annealer.
+pieces cut), independently, or `iterated` (sequentially, then re-solving
+every piece against all the others' cuts until nothing improves), with
+`brute_force_piece_solver` for small pieces, `gurobi_piece_solver` for the
+exact optimum of larger ones, or `qubo_piece_solver(lambda)` for the
+annealer.
+
+A third budget rule, `marginal`, solves each piece for 0 to B cuts first and
+gives the budget to the pieces whose cuts save the most flow (the
+common-multiplier idea of #14, solved exactly by dynamic programming).
+`refine_split()` then moves one unit of budget at a time between pieces while
+that lowers the combined flow. `--fit-qubits 156` picks the fewest pieces
+whose QUBOs all fit an IBM Heron device:
+
+```
+python decomposition.py testcases/50.planarflow --fit-qubits 156 --budget 6 --split marginal
+```
+
+[run_decomposition_benchmark.py](run_decomposition_benchmark.py) measures
+every rule and mode against Gurobi's optimum on the slide instances and
+budgets, with each piece solved exactly, so the only error left is the
+decomposition's own.
 
 ## QAOA on simulators (Qiskit and CUDA-Q)
 
@@ -119,12 +146,63 @@ and lambdas, which parameter transfer (#16) needs.
 
 Limits:
 
-- Statevector simulation of the full `V + 3E - 2`-qubit QUBO caps this at
-  24 qubits, which means the `tiny_*` instances (14 to 22 qubits).
+- Statevector simulation of the full `V + 3E - 2`-qubit QUBO caps the exact
+  scores at 24 qubits, which means the `tiny_*` instances (14 to 22 qubits).
+  Larger problems use matrix product states (next section).
 - CUDA-Q's CPU simulator (`qpp-cpu`) is much slower than Aer: 0.3 to 1
   second per evaluation at 14 qubits, against milliseconds for Aer. It is
   faster with `OMP_NUM_THREADS=1` at these sizes. On a GPU, pass
-  `--target nvidia`.
+  `--target nvidia`, or `--target tensornet-mps` for more qubits.
+
+## Mid-size instances and matrix-product-state QAOA
+
+Between `tiny_c` (22 qubits) and `50.planarflow` (912) there were no
+instances at all. [instances.py](instances.py) makes nine, in
+[testcases/mid/](testcases/mid/): planar, Erdős–Rényi and k-NN networks
+whose QUBOs have 39 to 149 variables, so each fits a 156-qubit IBM device.
+They are seeded and reproducible, and
+[results/mid_instances.csv](results/mid_instances.csv) lists their exact
+optima for the 23 budgets worth benchmarking (λ window with an interior, and
+flow left). On every one of those rows greedy is already optimal, and on 22
+the optimal cut touches the source or sink: like the random `testcases/`
+families, they exercise the machinery but are easy classically (#1).
+
+Past 24 qubits, `qaoa_qiskit.py --method mps` simulates the circuit as a
+matrix product state, with `--bond-dimension` capping it (approximate, but
+polynomial). Qubits are then ordered by reverse Cuthill–McKee, which keeps
+coupled variables close. Without that order, one 78-qubit evaluation had not
+finished after ten minutes; with it a 40-qubit one takes 0.1 s. The exact
+optimum and ground energy come from Gurobi (`--exact-backend gurobi`), and
+the run is scored from shots and by `gap_closed`: the share of the energy
+gap between the uniform state (0) and the ground state (1). That measure
+replaces the approximation ratio, on which random guessing already scores
+0.56–0.58.
+
+```
+python qaoa_qiskit.py testcases/mid/knn_11_2_s0.flow --budget 2 --reps 1 \
+    --method mps --bond-dimension 32 --exact-backend gurobi --max-qubits 200
+```
+
+[run_qaoa_mid.py](run_qaoa_mid.py) runs every manifest row at depths 1 to 3
+with the angles trained on `tiny_a` reused unchanged (parameter transfer,
+#16). For comparison, it also trains the angles directly, at every depth, on
+the rows of up to 81 qubits (`--train-max-qubits`).
+
+[results/qaoa_mid.csv](results/qaoa_mid.csv) contains the completed run:
+69 transferred-angle rows (all 23 cases at depths 1, 2 and 3), plus 30
+directly trained rows (the ten cases of at most 81 qubits at those depths).
+These use MPS bond dimension 32, 4096 shots and seed 0; the header identifies
+the clean source commit and command. The simulations are approximate and
+the instances are already solved optimally by greedy, so these rows show
+simulator reach and angle-transfer behavior rather than a quantum advantage.
+
+The saved `qaoa_mid.csv` predates the deterministic RCM-order fix and did
+not record its variable permutation. Its original approximate energies and
+timings are historical measurements; they are not exactly reproducible from
+the seed alone, since Python hash randomization affected the old ordering.
+New runs use stable integer labels for RCM and record the actual `variables`
+order and framework versions. Regenerate into a separate file when comparing
+new results; the historical CSV is retained unchanged.
 
 ## Benchmark results and plots
 

@@ -65,6 +65,8 @@ QUBOs over max_qubits (24 by default, run_benchmark.py's exact-solver cap):
 the tiny_* instances (14 to 22 qubits) and nothing larger.
 """
 import argparse
+import contextlib
+import io
 import json
 import math
 import sys
@@ -80,8 +82,13 @@ import run_benchmark as rb
 
 DEFAULT_MAX_QUBITS = 24
 
+# Largest problem whose 2**n basis states are enumerated for exact scores
+# (energies(), optimal_mask()). Larger problems are scored from shots.
+EXACT_QUBITS = 24
+
 # Variable families in the order qubits are assigned to them.
 VARIABLE_FAMILIES = ('x', 'gamma', 'w', 'pi')
+QUBIT_ORDERS = ('family', 'rcm')
 
 # Samples decoded and repaired per run, as qubo_verify_parameters() decodes
 # the annealer's 20 lowest-energy samples.
@@ -102,10 +109,34 @@ def variable_order(bqm):
     the same variable from run to run, which matters once angles or samples
     are stored.
     """
-    def key(label):
-        family, index = label.rsplit('_', 1)
-        return VARIABLE_FAMILIES.index(family), int(index)
-    return sorted(bqm.variables, key=key)
+    return sorted(bqm.variables, key=_family_key)
+
+
+def _family_key(label):
+    family, index = label.rsplit('_', 1)
+    return VARIABLE_FAMILIES.index(family), int(index)
+
+
+def rcm_order(bqm):
+    """
+    The QUBO variables in reverse Cuthill-McKee order of their interaction
+    graph, which keeps coupled variables close together.
+
+    Matrix-product-state simulation pays for every coupling by how many
+    qubits it spans, so this order is what makes it practical. In
+    variable_order(), one p = 1 evaluation of a 78-qubit instance had not
+    finished after ten minutes; in this order a 40-qubit k-NN instance takes
+    0.1 s, and a 53-qubit planar one 4.5 s with the bond dimension capped at
+    64. The order is deterministic across Python hash seeds: the traversal
+    uses stable integer node IDs instead of randomized string hashes.
+    """
+    variables = variable_order(bqm)
+    position = {label: i for i, label in enumerate(variables)}
+    graph = nx.Graph()
+    graph.add_nodes_from(range(len(variables)))
+    graph.add_edges_from(sorted(
+        tuple(sorted((position[u], position[v]))) for u, v in bqm.quadratic))
+    return [variables[i] for i in nx.utils.reverse_cuthill_mckee_ordering(graph)]
 
 
 def ising_from_bqm(bqm, variables):
@@ -160,11 +191,32 @@ class NIPQaoaProblem:
     J: dict
     offset: float
     opt_nip: float
+    ground_energy: float = None
     _cache: dict = field(default_factory=dict, repr=False)
 
     @property
     def num_qubits(self):
         return len(self.variables)
+
+    @property
+    def exact(self):
+        """Small enough to enumerate every basis state (EXACT_QUBITS)."""
+        return self.num_qubits <= EXACT_QUBITS
+
+    @property
+    def maxflow(self):
+        """Max flow with nothing interdicted."""
+        if 'maxflow' not in self._cache:
+            self._cache['maxflow'] = rb.max_flow(self.di_g, self.src_node,
+                                                 self.tgt_node)
+        return self._cache['maxflow']
+
+    def _require_exact(self, what):
+        if not self.exact:
+            raise ValueError(
+                f'{what} enumerates all 2**{self.num_qubits} basis states; '
+                f'only problems of up to {EXACT_QUBITS} qubits are scored '
+                f'exactly, larger ones from shots')
 
     @property
     def edge_list(self):
@@ -187,6 +239,7 @@ class NIPQaoaProblem:
         H_C on every basis state, little-endian (length 2**n), in QUBO units.
         Cached: it is 2**n floats and every exact score reads it.
         """
+        self._require_exact('energies()')
         if 'energies' not in self._cache:
             index = np.arange(2 ** self.num_qubits, dtype=np.int64)
 
@@ -207,6 +260,7 @@ class NIPQaoaProblem:
         Boolean over basis states: is its x pattern an optimal interdiction?
         Only the E x bits decide it, so it costs 2**E max-flow solves.
         """
+        self._require_exact('optimal_mask()')
         if 'optimal_mask' not in self._cache:
             num_edges = len(self.edge_list)
             optimal_pattern = np.zeros(2 ** num_edges, dtype=bool)
@@ -239,16 +293,29 @@ class NIPQaoaProblem:
 
 
 def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
-                       max_qubits=DEFAULT_MAX_QUBITS):
+                       max_qubits=DEFAULT_MAX_QUBITS, exact_backend='brute',
+                       order='family'):
     """
     The QAOA problem for one graph and budget. `lam` is a number, or 'auto'
     for the midpoint of the exact window (run_benchmark.choose_lambda()).
+
+    `exact_backend` computes the optimal flows the window needs: 'brute'
+    (enumeration, the tiny instances) or 'gurobi' (license required; the
+    only practical one past a dozen arcs). A problem of up to EXACT_QUBITS
+    qubits gets its ground energy by enumerating the Hamiltonian; a larger
+    one from Gurobi's exact solve of the penalised model
+    (run_benchmark.exact_reference()), which needs a license too. `order`
+    is the qubit order: 'family' (variable_order()) or 'rcm' (rcm_order(),
+    for matrix-product-state simulation).
 
     Raises ValueError when the window is empty (no lambda makes the QUBO's
     ground state the optimal interdiction, so there is nothing for QAOA to
     find), when a given `lam` does not encode the optimum, or when the QUBO
     is over `max_qubits`.
     """
+    if order not in QUBIT_ORDERS:
+        raise ValueError(f'unknown qubit order {order!r}, expected one of '
+                         f'{QUBIT_ORDERS}')
     # Enforce the simulation limit before the combinatorial reference scan.
     # Compile with positive placeholder penalties to count the actual QUBO
     # variables, including auxiliaries, without first solving for lambda.
@@ -257,7 +324,8 @@ def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
         raise ValueError(
             f'{instance} B={B}: the QUBO has {len(sizing_bqm.variables)} variables, '
             f'over the statevector limit of {max_qubits} qubits')
-    curve = rb.optimum_curve('brute', di_g, src_node, tgt_node, B)
+    with contextlib.redirect_stdout(io.StringIO()):  # Gurobi prints every solve
+        curve = rb.optimum_curve(exact_backend, di_g, src_node, tgt_node, B)
     lo, hi = rb.lambda_window(curve, B)
     if lam == 'auto':
         lam = rb.choose_lambda(lo, hi)
@@ -277,28 +345,39 @@ def problem_from_graph(di_g, src_node, tgt_node, B, lam='auto', instance='',
         raise ValueError(
             f'{instance} B={B}: the QUBO has {len(bqm.variables)} variables, '
             f'over the statevector limit of {max_qubits} qubits')
-    variables = variable_order(bqm)
+    variables = variable_order(bqm) if order == 'family' else rcm_order(bqm)
     h, J, offset = ising_from_bqm(bqm, variables)
     problem = NIPQaoaProblem(
         instance=instance, di_g=di_g, src_node=src_node, tgt_node=tgt_node,
         B=B, lam=lam, lambda_window=(lo, hi), bqm=bqm, variables=variables,
         h=h, J=J, offset=offset, opt_nip=curve[B])
 
-    energies = problem.energies()
-    ground = energies <= energies.min() + ENERGY_TOL
-    if not np.all(problem.optimal_mask()[ground]):
-        raise ValueError(
-            f'{instance} B={B}: lambda={lam} is outside the window '
-            f'({lo}, {hi}); the QUBO ground state is not an optimal '
-            f'interdiction')
+    if problem.exact:
+        energies = problem.energies()
+        ground = energies <= energies.min() + ENERGY_TOL
+        if not np.all(problem.optimal_mask()[ground]):
+            raise ValueError(
+                f'{instance} B={B}: lambda={lam} is outside the window '
+                f'({lo}, {hi}); the QUBO ground state is not an optimal '
+                f'interdiction')
+        problem.ground_energy = float(energies.min())
+    else:
+        # exact_reference() raises the same way when the penalised optimum
+        # does not decode to an optimal interdiction.
+        with contextlib.redirect_stdout(io.StringIO()):
+            _, ground_energy = rb.exact_reference(
+                'gurobi', di_g, src_node, tgt_node, B, lam)
+        problem.ground_energy = float(ground_energy)
     return problem
 
 
-def build_problem(instance, B, lam='auto', max_qubits=DEFAULT_MAX_QUBITS):
+def build_problem(instance, B, lam='auto', max_qubits=DEFAULT_MAX_QUBITS,
+                  exact_backend='brute', order='family'):
     """problem_from_graph() for a flow file."""
     di_g, src_node, tgt_node = ni.read_flow_file(instance)
     return problem_from_graph(di_g, src_node, tgt_node, B, lam,
-                              instance=str(instance), max_qubits=max_qubits)
+                              instance=str(instance), max_qubits=max_qubits,
+                              exact_backend=exact_backend, order=order)
 
 
 def linear_ramp(reps, delta=0.6):
@@ -374,33 +453,56 @@ def score_samples(problem, counts, num_repaired=REPAIRED_SAMPLES):
         interdicted_edges   the arcs achieving flow_after_repair
         shot_p_optimal      fraction of all shots that are optimal
                             interdictions (the shot estimate of p_optimal)
+        p_feasible          fraction of shots cutting at most B arcs
+        shot_mean_ratio     mean over all shots of the flow-reduction ratio
+                            (maxflow - flow) / (maxflow - opt_nip), the
+                            measure the rest of the repository scores
+                            methods by (1 = optimal), with over-budget shots
+                            scoring 0; no repair. If no reduction is
+                            possible (for example B = 0), an optimal
+                            feasible shot scores 1 and other shots score 0.
 
     `counts` maps per-qubit bit tuples to shot counts.
     """
     shots = sum(counts.values())
     energy = {bits: problem.bits_energy(bits) for bits in counts}
+    flows = {}
+
+    def surviving(bits):
+        """Surviving flow of the shot's cut, or None when over budget."""
+        cut = problem.interdicted_edges(bits)
+        if len(cut) > problem.B:
+            return None
+        key = frozenset(cut)
+        if key not in flows:
+            flows[key] = rb.max_flow(problem.di_g, problem.src_node,
+                                     problem.tgt_node, cut)
+        return flows[key]
+
     lowest = sorted(counts, key=lambda bits: (energy[bits], bits))
     lowest = lowest[:num_repaired]
-
     before, after, best_edges = math.inf, math.inf, []
     for bits in lowest:
-        cut = problem.interdicted_edges(bits)
-        if len(cut) <= problem.B:
-            before = min(before, rb.max_flow(
-                problem.di_g, problem.src_node, problem.tgt_node, cut))
+        flow = surviving(bits)
+        if flow is not None:
+            before = min(before, flow)
         repaired, flow = ni.improve_dwave_solution(
             problem.di_g, problem.x_vector(bits), problem.src_node,
             problem.tgt_node, problem.B)
         if flow < after:
             after, best_edges = flow, repaired
 
-    optimal = 0
+    optimal = feasible = 0
+    ratio_sum = 0.0
+    reduction = problem.maxflow - problem.opt_nip
     for bits, count in counts.items():
-        cut = problem.interdicted_edges(bits)
-        if len(cut) <= problem.B and rb.max_flow(
-                problem.di_g, problem.src_node, problem.tgt_node,
-                cut) == problem.opt_nip:
-            optimal += count
+        flow = surviving(bits)
+        if flow is None:
+            continue
+        feasible += count
+        optimal += count if flow == problem.opt_nip else 0
+        ratio_sum += count * ((problem.maxflow - flow) / reduction
+                              if reduction else float(flow == problem.opt_nip))
 
     return {
         'best_sample_energy': energy[lowest[0]],
@@ -408,14 +510,38 @@ def score_samples(problem, counts, num_repaired=REPAIRED_SAMPLES):
         'flow_after_repair': after,
         'interdicted_edges': best_edges,
         'shot_p_optimal': optimal / shots,
+        'p_feasible': feasible / shots,
+        'shot_mean_ratio': ratio_sum / shots,
     }
 
 
 def uniform_scores(problem):
-    """Scores of the uniform superposition |+>^n (QAOA at p = 0)."""
+    """
+    Scores of the uniform superposition |+>^n (QAOA at p = 0). Its
+    expected energy is `offset` at any size; the other scores need every
+    basis state, so past EXACT_QUBITS they are NaN.
+    """
+    if not problem.exact:
+        return {'uniform_expected_energy': problem.offset,
+                'uniform_approx_ratio': math.nan,
+                'uniform_p_ground': math.nan, 'uniform_p_optimal': math.nan}
     probabilities = np.full(2 ** problem.num_qubits, 2.0 ** -problem.num_qubits)
     scores = score_probabilities(problem, probabilities)
     return {f'uniform_{key}': value for key, value in scores.items()}
+
+
+def gap_closed(problem, expected_energy):
+    """
+    How much of the energy gap between the uniform state and the ground
+    state a state closes: (offset - <H_C>) / (offset - ground energy), 0 for
+    random guessing and 1 for the ground state. approx_ratio measures from
+    the highest-energy state instead, which breaks many penalties at once,
+    so random guessing already scores 0.575 on tiny_a and 0.564 on tiny_d
+    (B = 1); this starts at 0, and it needs only the ground energy, so it
+    is defined at any size.
+    """
+    return (problem.offset - expected_energy) / (
+        problem.offset - problem.ground_energy)
 
 
 @dataclass
@@ -446,11 +572,14 @@ class QaoaResult:
     opt_nip: float
     opt_qubo: float
     greedy: float
+    gap_closed: float = math.nan
+    p_feasible: float = math.nan
+    shot_mean_ratio: float = math.nan
 
     def to_json(self):
-        """A JSON-safe dict (inf becomes None)."""
+        """A JSON-safe dict (inf and NaN become None)."""
         def clean(value):
-            if isinstance(value, float) and math.isinf(value):
+            if isinstance(value, float) and not math.isfinite(value):
                 return None
             if isinstance(value, (list, tuple)):
                 return [clean(v) for v in value]
@@ -461,26 +590,45 @@ class QaoaResult:
 
 
 def run_qaoa(backend, problem, reps, shots=4096, seed=0, maxiter=300,
-             restarts=0):
+             restarts=0, theta=None):
     """
-    Train a depth-`reps` QAOA on `backend`, then score it exactly and from
-    `shots` samples.
+    Train a depth-`reps` QAOA on `backend` -- or take the given `theta`
+    unchanged, as parameter transfer does -- then score it from `shots`
+    samples, and exactly where that is possible.
 
     `backend` must offer
         name                          a short label
-        normalized_expectation(theta) <(H_C - offset) / scale>, exact
-        probabilities(theta)          the 2**n probability vector, little-endian
+        normalized_expectation(theta) <(H_C - offset) / scale>
         sample(theta, shots, seed)    {per-qubit bit tuple: count}
-    and must have been built for this `problem` and `reps`. Training time
+        exact_probabilities           whether probabilities(theta), the
+                                      2**n probability vector (little-
+                                      endian), is available
+    and must have been built for this `problem` and `reps`. The exact scores
+    (approx_ratio, p_ground, p_optimal) need those probabilities and a
+    problem of at most EXACT_QUBITS qubits; otherwise they are NaN and the
+    expected energy is the backend's estimate (exact for statevector,
+    approximate for a truncated matrix product state). Training time
     excludes building the circuit, as SA's excludes building the QUBO.
     """
     start = time.perf_counter()
-    theta, _, evaluations = optimize_angles(
-        backend.normalized_expectation, reps, seed=seed, maxiter=maxiter,
-        restarts=restarts)
+    if theta is None:
+        theta, _, evaluations = optimize_angles(
+            backend.normalized_expectation, reps, seed=seed, maxiter=maxiter,
+            restarts=restarts)
+    else:
+        theta, evaluations = np.asarray(theta, dtype=float), 0
+        if theta.shape != (2 * reps,):
+            raise ValueError(f'expected {2 * reps} angles for p = {reps}, '
+                             f'got {theta.shape}')
     train_time = time.perf_counter() - start
 
-    exact = score_probabilities(problem, backend.probabilities(theta))
+    if problem.exact and getattr(backend, 'exact_probabilities', True):
+        exact = score_probabilities(problem, backend.probabilities(theta))
+    else:
+        exact = {'expected_energy': problem.scale * float(
+                     backend.normalized_expectation(theta)) + problem.offset,
+                 'approx_ratio': math.nan, 'p_ground': math.nan,
+                 'p_optimal': math.nan}
     start = time.perf_counter()
     counts = backend.sample(theta, shots, seed)
     sample_time = time.perf_counter() - start
@@ -495,9 +643,10 @@ def run_qaoa(backend, problem, reps, shots=4096, seed=0, maxiter=300,
         uniform_expected_energy=uniform['uniform_expected_energy'],
         uniform_p_optimal=uniform['uniform_p_optimal'],
         shots=shots, sample_time_sec=sample_time, **sampled,
-        opt_nip=problem.opt_nip, opt_qubo=float(problem.energies().min()),
+        opt_nip=problem.opt_nip, opt_qubo=problem.ground_energy,
         greedy=rb.greedy_from_scratch(problem.di_g, problem.src_node,
-                                      problem.tgt_node, problem.B))
+                                      problem.tgt_node, problem.B),
+        gap_closed=gap_closed(problem, exact['expected_energy']))
 
 
 def format_result(result):
@@ -509,13 +658,19 @@ def format_result(result):
         f'{result.train_time_sec:.2f} s; theta (beta..., gamma...) = '
         f'{np.round(result.theta, 4).tolist()}',
         f'  <H_C> = {result.expected_energy:.4f} (uniform '
-        f'{result.uniform_expected_energy:.4f}, ground {result.opt_qubo:.4f}), '
-        f'approximation ratio {result.approx_ratio:.4f}',
+        f'{result.uniform_expected_energy:.4f}, ground {result.opt_qubo:.4f}): '
+        f'gap closed {result.gap_closed:.4f}, approximation ratio '
+        f'{result.approx_ratio:.4f}',
         f'  P(ground state) = {result.p_ground:.4f}, '
         f'P(optimal interdiction) = {result.p_optimal:.4f} '
-        f'(uniform {result.uniform_p_optimal:.4f})',
-        f'  {result.shots} shots: P(optimal) = {result.shot_p_optimal:.4f}; '
-        f'best surviving flow {result.flow_before_repair} before repair, '
+        f'(uniform {result.uniform_p_optimal:.4f})'
+        + ('' if math.isfinite(result.p_optimal) else
+           ' -- exact scores need at most '
+           f'{EXACT_QUBITS} qubits and a statevector backend'),
+        f'  {result.shots} shots: P(optimal) = {result.shot_p_optimal:.4f}, '
+        f'P(within budget) = {result.p_feasible:.4f}, mean flow-reduction '
+        f'ratio {result.shot_mean_ratio:.4f}; best surviving flow '
+        f'{result.flow_before_repair} before repair, '
         f'{result.flow_after_repair} after (optimum {result.opt_nip}, '
         f'greedy {result.greedy}); arcs {result.interdicted_edges}',
     ])
@@ -542,15 +697,25 @@ def cli(make_backend, description, argv=None, extra_args=None):
     parser.add_argument('--restarts', type=int, default=0,
                         help='random starts in addition to the linear ramp')
     parser.add_argument('--max-qubits', type=int, default=DEFAULT_MAX_QUBITS)
+    parser.add_argument('--exact-backend', choices=('brute', 'gurobi'),
+                        default='brute',
+                        help='optimal flows for the lambda window (gurobi '
+                             'past a dozen arcs; needs a license)')
+    parser.add_argument('--order', choices=QUBIT_ORDERS,
+                        help='qubit order (default: rcm for --method mps, '
+                             'family otherwise)')
     parser.add_argument('--json', help='also write the result as JSON here')
     if extra_args is not None:
         extra_args(parser)
     args = parser.parse_args(argv)
 
     lam = args.lam if args.lam == 'auto' else float(args.lam)
+    order = args.order or ('rcm' if getattr(args, 'method', None) == 'mps'
+                           else 'family')
     try:
         problem = build_problem(args.instance, args.budget, lam,
-                                max_qubits=args.max_qubits)
+                                max_qubits=args.max_qubits,
+                                exact_backend=args.exact_backend, order=order)
     except ValueError as error:
         print(f'error: {error}', file=sys.stderr)
         return 2

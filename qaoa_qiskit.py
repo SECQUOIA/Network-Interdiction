@@ -33,6 +33,12 @@ import qaoa_common
 # these keeps the cost layer as RZ/RZZ, which Aer simulates directly.
 BASIS_GATES = ['h', 'rz', 'rzz', 'rx', 'cx']
 
+# Aer simulation methods: the exact statevector (up to qaoa_common's
+# EXACT_QUBITS for the exact scores, about 30 qubits in memory) and the
+# matrix product state, whose cost grows with entanglement rather than
+# qubit count. Capping its bond dimension makes it approximate.
+METHODS = {'statevector': 'statevector', 'mps': 'matrix_product_state'}
+
 
 def cost_operator(problem):
     """(H_C - offset) / scale as a SparsePauliOp on problem.num_qubits."""
@@ -49,12 +55,33 @@ class QiskitBackend:
     The QAOA circuit for one problem and depth, simulated with Aer's V2
     primitives (an IBM device would need runtime primitives and the circuit
     transpiled to its ISA, #17).
+
+    `method` is 'statevector' (exact) or 'mps' (matrix product state).
+    `max_bond_dimension` caps the MPS bond dimension: None keeps it exact,
+    and so exponential in the entanglement; a cap such as 64 keeps it
+    polynomial at a truncation error. On a 40-qubit k-NN instance at p = 2
+    a cap of 64 changed <H_C>/scale by 6e-5 (relative 1e-5) and cut the
+    time from 71 s to 5 s. MPS wants a qubit order that keeps couplings
+    short: build the problem with order='rcm'.
     """
     name = 'qiskit'
 
-    def __init__(self, problem, reps):
+    def __init__(self, problem, reps, method='statevector',
+                 max_bond_dimension=None):
+        if method not in METHODS:
+            raise ValueError(f'unknown method {method!r}, expected one of '
+                             f'{tuple(METHODS)}')
         self.problem = problem
         self.reps = reps
+        self.method = method
+        self.backend_options = {'method': METHODS[method]}
+        if max_bond_dimension is not None:
+            if method != 'mps':
+                raise ValueError('max_bond_dimension applies to method mps')
+            self.backend_options[
+                'matrix_product_state_max_bond_dimension'] = max_bond_dimension
+        # Exact probabilities need the statevector.
+        self.exact_probabilities = method == 'statevector'
         self.operator = cost_operator(problem)
         ansatz = qaoa_ansatz(self.operator, reps=reps)
         # qaoa_ansatz() names its parameters β[0..p-1] and γ[0..p-1], and
@@ -67,16 +94,22 @@ class QiskitBackend:
             raise RuntimeError(f'unexpected qaoa_ansatz parameters {names}')
         self.circuit = transpile(ansatz, basis_gates=BASIS_GATES,
                                  optimization_level=0)
-        self.estimator = EstimatorV2()
+        self.estimator = EstimatorV2(
+            options={'backend_options': dict(self.backend_options)})
         self.simulator = AerSimulator(method='statevector')
 
     def normalized_expectation(self, theta):
-        """Exact <(H_C - offset) / scale> at theta = [beta..., gamma...]."""
+        """
+        <(H_C - offset) / scale> at theta = [beta..., gamma...]: exact for
+        the statevector and an uncapped MPS, approximate for a capped one.
+        """
         job = self.estimator.run([(self.circuit, self.operator, list(theta))])
         return float(job.result()[0].data.evs)
 
     def probabilities(self, theta):
         """The 2**n outcome probabilities at theta, little-endian."""
+        if not self.exact_probabilities:
+            raise ValueError('exact probabilities need method statevector')
         circuit = self.circuit.assign_parameters(list(theta))
         circuit.save_statevector()
         state = self.simulator.run(circuit).result().get_statevector()
@@ -88,7 +121,8 @@ class QiskitBackend:
         bitstrings put qubit 0 last, so each is reversed.
         """
         measured = self.circuit.measure_all(inplace=False)
-        sampler = SamplerV2(seed=seed)
+        sampler = SamplerV2(seed=seed, options={
+            'backend_options': dict(self.backend_options)})
         result = sampler.run([(measured, list(theta))], shots=shots).result()
         counts = result[0].data.meas.get_counts()
         return {tuple(int(bit) for bit in reversed(key)): count
@@ -96,9 +130,20 @@ class QiskitBackend:
 
 
 def main(argv=None):
+    def simulator_options(parser):
+        parser.add_argument('--method', choices=tuple(METHODS),
+                            default='statevector',
+                            help='Aer method: exact statevector, or matrix '
+                                 'product state for more qubits')
+        parser.add_argument('--bond-dimension', type=int,
+                            help='cap on the MPS bond dimension (default: '
+                                 'none, exact)')
+
     return qaoa_common.cli(
-        lambda problem, reps, args: QiskitBackend(problem, reps),
-        'Penalty-QAOA for the NIP QUBO, simulated with Qiskit Aer.', argv)
+        lambda problem, reps, args: QiskitBackend(
+            problem, reps, args.method, args.bond_dimension),
+        'Penalty-QAOA for the NIP QUBO, simulated with Qiskit Aer.', argv,
+        extra_args=simulator_options)
 
 
 if __name__ == '__main__':
