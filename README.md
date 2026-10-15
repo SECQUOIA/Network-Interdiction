@@ -293,6 +293,25 @@ establish offline routing fit for the supplied cohort, not present-day device
 availability, noise tolerance or successful optimization. QPU and execution times
 remain unmeasured. Run under an outer wall-time/memory limit for larger studies.
 
+The [saved routing study](results/ibm_snapshot_resources.json) and
+[run manifest](results/ibm_snapshot_resources.manifest.json) cover all four tiny
+cases, nine tracked medium cases, and `50.planarflow` on both snapshots. At
+`p=1`, lambda 10, seed 0 and optimization level 1, 11 of 14 cases route on each:
+
+| Snapshot | Largest fitted case in this cohort | Logical / active physical qubits | Routed depth | Two-qubit gates | Transpilation seconds |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Sherbrooke, 127 qubits | `planar_13_s0`, budget 3 | 116 / 116 | 781 | 1677 | 0.092 |
+| Torino, 133 qubits | `planar_13_s0`, budget 3 | 116 / 116 | 912 | 1620 | 0.079 |
+
+Both reject the 142-variable k-NN and 149-variable ER cases, and the
+912-variable `50.planarflow` QUBO, before transpilation. Thus this formulation of
+the 50-node case cannot fit either snapshot without decomposition or a different
+encoding. The chosen penalties and fixed angles define a routing experiment;
+they are not a certified penalty window or optimized solution. These are single
+compilations in case order, with first-call imports included and no warmup, so
+timings are observations rather than a compiler speed comparison. The study
+finished within its 300-second/8-GiB bound; no circuit was executed.
+
 
 The same QUBO the annealer samples can be solved with a penalty-QAOA, written
 twice: once in Qiskit ([qaoa_qiskit.py](qaoa_qiskit.py), Aer simulators) and
