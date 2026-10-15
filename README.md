@@ -1,6 +1,45 @@
 # Network-Interdiction
 Algorithms for solving maximum flow network interdiction problem with qubo-based solvers.
 
+## Offline minor-embedding resources
+
+[profile_embedding.py](profile_embedding.py) measures logical-to-physical qubit
+overhead with bounded `minorminer` searches on ideal Pegasus P16 (5640 qubits)
+and Zephyr Z12 with tile size 4 (4800 qubits). It uses only core dependencies,
+with no sampler, credential, live device query or QPU execution:
+
+```bash
+python profile_embedding.py --case testcases/tiny_a.flow:1:10 \
+    --case testcases/50.planarflow:5:10 --seed 0 --seed 1 \
+    --timeout 5 --out results/embedding.json
+```
+
+Cases use explicit penalties; this resource study performs no exact solve or
+penalty search. Every BQM variable is retained, including isolates; zero-valued
+quadratic terms need no physical coupler. Each attempt uses the supplied seed,
+one thread and `tries=1`, and reports embedding wall time separately from BQM /
+interaction-graph construction. The construction is reused across seeds and its
+time is repeated in those rows, so it should not be summed once per seed.
+An outer process deadline and memory limit are still appropriate for a campaign.
+
+Successful rows retain complete chains, physical qubits, overhead ratio, mean
+and maximum chain length and its histogram. Before accepting them, the script
+checks complete variable coverage, nonempty connected and disjoint chains, and
+a physical coupler for every logical interaction. Failures are explicitly
+`not_found_within_budget`; only an excess of logical variables over target
+qubits yields the stronger `too_many_logical_variables` refusal. Unmeasured
+physical usage and QPU time remain null. Reports are flushed after each attempt
+and pin source/input/topology hashes and library versions.
+
+These are ideal graph models. A live device's defective qubits/couplers can
+invalidate a mapping; embedding success says nothing about annealing quality,
+chain strength, solution feasibility or speedup. See D-Wave's
+[topology guidance](https://docs.dwavequantum.com/en/latest/quantum_research/example_topology_samplers.html)
+and [heuristic-search contract](https://docs.dwavequantum.com/en/latest/ocean/api_ref_system/generated/minorminer.find_embedding.html).
+This tool retains the existing `dwave-networkx` generator because its replacement,
+`dwave-graphs`, currently requires NumPy 2, incompatible with the repository's
+PyQUBO NumPy<2 requirement. No dependency constraints are overridden.
+
 ## Setup
 
 ```
