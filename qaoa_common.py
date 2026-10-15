@@ -308,24 +308,22 @@ class NIPQaoaProblem:
 def restricted_optimum_curve(di_g, src, tgt, interdictable, backend):
     """Exact f(k) for a contracted piece, including its fixed boundary arcs."""
     edges = sorted(interdictable)
-    integral = all(float(data['weight']).is_integer()
-                   for _, _, data in di_g.edges(data=True))
     curve = []
     for k in range(len(edges) + 1):
         if backend == 'brute':
             value = min(rb.max_flow(di_g, src, tgt, cut)
                         for cut in itertools.combinations(edges, k))
         elif backend == 'gurobi':
-            model, _ = ni._build_nip_milp(di_g, src, tgt, k, edges)
+            model, x = ni._build_nip_milp(di_g, src, tgt, k, edges)
             model.optimize()
             if model.Status != ni.GRB.OPTIMAL:
                 raise RuntimeError('piece reference did not reach optimality')
-            value = float(model.ObjVal)
-            # Integer flow files (and their contractions) have integer
-            # optima. Strip MIP tolerance noise before comparing window
-            # endpoints, without rounding callers' fractional capacities.
-            if integral:
-                value = round(value)
+            # Recompute the objective of the optimal discrete cut using
+            # the same flow calculation as decoding/scoring. Solver
+            # tolerance noise must not change equality with a fractional
+            # optimum, and rounding would erase real capacity differences.
+            cut = [edge for edge in edges if x[edge].X > 0.5]
+            value = rb.max_flow(di_g, src, tgt, cut)
         else:
             raise ValueError(f'unknown exact backend: {backend}')
         curve.append(value)

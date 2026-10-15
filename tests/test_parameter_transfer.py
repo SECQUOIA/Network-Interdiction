@@ -66,7 +66,7 @@ def test_repair_cannot_cut_a_fixed_high_capacity_arc(problem):
 
 
 @needs_gurobi
-@pytest.mark.parametrize('scale', [1, 0.125])
+@pytest.mark.parametrize('scale', [1, 0.125, 0.13, 0.01])
 def test_restricted_gurobi_reference_agrees_with_enumeration(problem, scale):
     graph = problem.di_g.copy()
     for _, _, data in graph.edges(data=True):
@@ -78,6 +78,28 @@ def test_restricted_gurobi_reference_agrees_with_enumeration(problem, scale):
         exact_backend='gurobi')
     assert actual.lambda_window == pytest.approx((5 * scale, 10 * scale))
     assert actual.ground_energy == pytest.approx(expected.ground_energy)
+    bits = tuple(int(variable == 'x_0') for variable in actual.variables)
+    scores = qc.score_samples(actual, {bits: 10})
+    assert scores['shot_p_optimal'] == 1
+    assert scores['flow_before_repair'] == actual.opt_nip
+
+
+def test_restricted_size_limit_counts_only_compiled_piece_variables(problem):
+    # Full tiny_a uses 14 qubits, but this restricted piece uses only eight.
+    piece = qc.problem_from_graph(
+        problem.di_g, 0, 3, 1, max_qubits=8,
+        interdictable=((0, v) for v in (1, 2)))
+    assert piece.num_qubits == 8
+    assert piece.opt_nip == 5
+
+
+def test_restricted_size_limit_precedes_its_exact_search(problem, monkeypatch):
+    def unexpected_search(*args, **kwargs):
+        pytest.fail('oversized piece reached exact reference search')
+    monkeypatch.setattr(qc, 'restricted_optimum_curve', unexpected_search)
+    with pytest.raises(ValueError, match='statevector limit'):
+        qc.problem_from_graph(problem.di_g, 0, 3, 1, max_qubits=7,
+                              interdictable=[(0, 1), (0, 2)])
 
 
 def test_zero_budget_sample_score_is_finite():
