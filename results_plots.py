@@ -42,7 +42,7 @@ RESULTS = REPO / "results"
 FAMILY_SHORT = {"planar": "planar", "Erdős–Rényi": "ER", "k-NN": "k-NN"}
 _FAMILY_FROM_NAME = {"planar": "planar", "erdos": "Erdős–Rényi", "knn": "k-NN"}
 
-# Classical methods on the slide instances:
+# Classical methods on the large instances:
 # label -> (flow column, time columns, colour, marker).
 CLASSICAL = {
     "Gurobi (exact MILP)": ("Opt_NIP", ["Gurobi_time_sec"], C_GUROBI, "D"),
@@ -88,8 +88,12 @@ def short_name(instance: str) -> str:
     return f"{FAMILY_SHORT[family]} {stem.split('.')[0].split('_')[0]}"
 
 
-def load_slide() -> pd.DataFrame:
-    """results/slide_instances_sa.csv with family, qubits and a case label."""
+def load_large() -> pd.DataFrame:
+    """
+    The large instances: the nine networks of testcases/ (50-125 nodes) at
+    27 budgets, from results/slide_instances_sa.csv, with family, qubits and
+    a case label.
+    """
     df = utils.load_results(RESULTS / "slide_instances_sa.csv")
     df["qubits"] = qubo_qubits(df["V"], df["E"])
     df["name"] = df["instance"].map(short_name)
@@ -115,20 +119,20 @@ def load_qaoa_mid() -> pd.DataFrame:
 
 
 def load_decomposition() -> pd.DataFrame:
-    """results/decomposition_slide.csv with the gap of each decomposed cut."""
-    df = pd.read_csv(RESULTS / "decomposition_slide.csv", comment="#")
+    """results/decomposition_large.csv with the gap of each decomposed cut."""
+    df = pd.read_csv(RESULTS / "decomposition_large.csv", comment="#")
     df["gap"] = df["flow"] / df["optimum"] - 1
     df["family"] = df["instance"].str.rsplit(".", n=1).str[1].map(
         utils._FAMILY_FROM_EXTENSION)
     return df
 
 
-def classical_long(slide: pd.DataFrame) -> pd.DataFrame:
+def classical_long(large: pd.DataFrame) -> pd.DataFrame:
     """One row per (case, method) a method ran on: flow, gap and wall time."""
     rows = []
     for label, (column, times, _colour, _marker) in CLASSICAL.items():
-        ran = slide[column].notna()
-        sub = slide[ran]
+        ran = large[column].notna()
+        sub = large[ran]
         rows.append(pd.DataFrame({
             "case": sub["case"], "family": sub["family"], "method": label,
             "flow": sub[column], "gap": sub[column] / sub["Opt_NIP"] - 1,
@@ -137,9 +141,9 @@ def classical_long(slide: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(rows, ignore_index=True)
 
 
-def classical_summary(slide: pd.DataFrame) -> pd.DataFrame:
+def classical_summary(large: pd.DataFrame) -> pd.DataFrame:
     """Per method: cases run, optimal count, median and worst gap, median time."""
-    long = classical_long(slide)
+    long = classical_long(large)
     table = long.groupby("method", sort=False).agg(
         cases=("gap", "size"),
         optimal=("gap", lambda gap: int((gap.abs() < 1e-12).sum())),
@@ -195,26 +199,26 @@ def plot_example_instances(mid: pd.DataFrame, cases=EXAMPLE_CASES) -> plt.Figure
     return fig
 
 
-def plot_problem_sizes(slide: pd.DataFrame, mid: pd.DataFrame,
+def plot_problem_sizes(large: pd.DataFrame, mid: pd.DataFrame,
                        outcomes: pd.DataFrame,
                        decomposition: pd.DataFrame) -> plt.Figure:
     """
     QUBO qubits against arcs for every instance set, with the limits that
-    decide where each can run, and the largest piece of each slide instance
+    decide where each can run, and the largest piece of each large instance
     after the 156-qubit decomposition.
     """
     tiny = outcomes[outcomes["source"] == "tiny"].drop_duplicates("instance")
     tiny_arcs = [ni.read_flow_file(REPO / path)[0].number_of_edges()
                  for path in tiny["instance"]]
     mid_sizes = mid.drop_duplicates("instance")
-    slide_sizes = slide.drop_duplicates("instance")
+    large_sizes = large.drop_duplicates("instance")
     groups = [
         ("Tiny (exact statevector QAOA)", tiny_arcs, tiny["qubits"],
          ["tiny"] * len(tiny), "#B5648F"),
         ("Mid-size (MPS QAOA)", mid_sizes["E"], mid_sizes["qubits"],
          mid_sizes["family"], utils.C_ACCENT_DARK),
-        ("Slide instances (SA, Gurobi, decomposition)", slide_sizes["E"],
-         slide_sizes["qubits"], slide_sizes["family"], C_GUROBI),
+        ("Large (Gurobi, SA, decomposition)", large_sizes["E"],
+         large_sizes["qubits"], large_sizes["family"], C_GUROBI),
     ]
     fig, ax = plt.subplots(figsize=(10.5, 6.2))
     for label, arcs, qubits, families, colour in groups:
@@ -228,7 +232,7 @@ def plot_problem_sizes(slide: pd.DataFrame, mid: pd.DataFrame,
     fitted = (decomposition[(decomposition["setting"] == "fit156")
                             & (decomposition["rule"] != "no fit")]
               .groupby("instance")["max_piece_qubits"].max())
-    for _, row in slide_sizes.iterrows():
+    for _, row in large_sizes.iterrows():
         if row["instance"] in fitted.index:
             piece = fitted[row["instance"]]
             ax.plot([row["E"], row["E"]], [piece, row["qubits"]], ":",
@@ -262,22 +266,22 @@ def plot_problem_sizes(slide: pd.DataFrame, mid: pd.DataFrame,
                        color=C_REFERENCE, markersize=8, label=f)
                 for f in FAMILY_ORDER]
     framed_legend(fig, handles, ncol=3, y=0.0)
-    big = slide_sizes["qubits"]
+    big = large_sizes["qubits"]
     fit = len(fitted)
-    ax.set_title(f"Slide instances need {big.min():,}–{big.max():,} qubits; "
-                 f"decomposition brings {fit} of {len(slide_sizes)} under 156",
+    ax.set_title(f"The large instances need {big.min():,}–{big.max():,} qubits; "
+                 f"decomposition brings {fit} of {len(large_sizes)} under 156",
                  fontsize=14)
     fig.tight_layout()
     return fig
 
 
 # ── 2. classical methods ────────────────────────────────────────────────────
-def plot_classical_gaps(slide: pd.DataFrame) -> plt.Figure:
+def plot_classical_gaps(large: pd.DataFrame) -> plt.Figure:
     """
-    Heat map of each heuristic's gap on each slide case (Gurobi's row would
+    Heat map of each heuristic's gap on each large case (Gurobi's row would
     be all optimal). Columns are grouped by instance, instances by family.
     """
-    matrix = np.array([100 * (slide[CLASSICAL[label][0]] / slide["Opt_NIP"] - 1)
+    matrix = np.array([100 * (large[CLASSICAL[label][0]] / large["Opt_NIP"] - 1)
                        for label in HEURISTICS])
     cmap = ListedColormap(GAP_BIN_COLOURS).with_extremes(bad="#EDEDED")
     norm = BoundaryNorm(GAP_BINS[:-1] + [1e9], cmap.N)
@@ -293,17 +297,17 @@ def plot_classical_gaps(slide: pd.DataFrame) -> plt.Figure:
             colour = "white" if value >= 50 else "#222222"
         ax.text(j, i, text, ha="center", va="center", fontsize=9, color=colour)
     ax.set_yticks(range(len(HEURISTICS)), HEURISTICS)
-    ax.set_xticks(range(len(slide)), [f"B={b}" for b in slide["B"]],
+    ax.set_xticks(range(len(large)), [f"B={b}" for b in large["B"]],
                   rotation=90, fontsize=9)
     ax.tick_params(length=0)
     ax.grid(False)
     # Instance labels under their columns; lines between instances/families.
-    for name, group in slide.reset_index(drop=True).groupby("name", sort=False):
+    for name, group in large.reset_index(drop=True).groupby("name", sort=False):
         start, stop = group.index.min(), group.index.max()
         ax.text((start + stop) / 2, -0.6, name, ha="center", va="bottom",
                 fontsize=10.5)
         if start > 0:
-            new_family = slide["family"].iloc[start] != slide["family"].iloc[start - 1]
+            new_family = large["family"].iloc[start] != large["family"].iloc[start - 1]
             ax.axvline(start - 0.5, color="black" if new_family else "white",
                        linewidth=2.2 if new_family else 3)
     handles = [Patch(facecolor=colour, edgecolor=GRID_GREY, label=label)
@@ -311,22 +315,22 @@ def plot_classical_gaps(slide: pd.DataFrame) -> plt.Figure:
     handles.append(Patch(facecolor="#EDEDED", edgecolor=GRID_GREY,
                          label="not run (no valid λ)"))
     framed_legend(fig, handles, ncol=7, y=0.0)
-    summary = classical_summary(slide)
+    summary = classical_summary(large)
     short = {"Greedy from scratch": "greedy", "SA + greedy repair": "SA + repair",
              "Random start + repair": "random + repair"}
     counts = ", ".join(f"{short[label]} {summary.loc[label, 'optimal']}/"
                        f"{summary.loc[label, 'cases']}" for label in HEURISTICS)
     gurobi = next(iter(CLASSICAL))
-    ax.set_title(f"Gap to the optimum, %, on the {len(slide)} slide cases. Optimal: "
+    ax.set_title(f"Gap to the optimum, %, on the {len(large)} large cases. Optimal: "
                  f"{counts}. Gurobi: {summary.loc[gurobi, 'optimal']}/"
                  f"{summary.loc[gurobi, 'cases']}", fontsize=13, pad=26)
     fig.tight_layout(rect=(0, 0.08, 1, 1))
     return fig
 
 
-def plot_time_vs_gap(slide: pd.DataFrame) -> plt.Figure:
+def plot_time_vs_gap(large: pd.DataFrame) -> plt.Figure:
     """Wall time against gap, every case and method; large markers are medians."""
-    long = classical_long(slide)
+    long = classical_long(large)
     fig, ax = plt.subplots(figsize=(10.5, 6.0))
     for label, (_column, _times, colour, marker) in CLASSICAL.items():
         sub = long[long["method"] == label]
@@ -504,7 +508,7 @@ DECOMPOSITION_RULES = {"mincut": "min-cut\nsplit", "local": "local\nsplit",
 
 
 def plot_decomposition(decomposition: pd.DataFrame,
-                       slide: pd.DataFrame) -> plt.Figure:
+                       large: pd.DataFrame) -> plt.Figure:
     """
     Gap of the decomposed solution per budget-split rule (iterated mode),
     for four pieces and for pieces of at most 155 qubits, beside greedy on
@@ -512,7 +516,7 @@ def plot_decomposition(decomposition: pd.DataFrame,
     """
     iterated = decomposition[(decomposition["mode"] == "iterated")
                              & decomposition["flow"].notna()]
-    greedy_gap = slide["Greedy"] / slide["Opt_NIP"] - 1
+    greedy_gap = large["Greedy"] / large["Opt_NIP"] - 1
     four = iterated[iterated["setting"] == "pieces4"]["max_piece_qubits"]
     small = iterated[iterated["setting"] == "fit156"]["pieces"]
     settings = [("pieces4", f"4 pieces (largest {four.min():,.0f}–"
@@ -526,7 +530,7 @@ def plot_decomposition(decomposition: pd.DataFrame,
         sub = iterated[iterated["setting"] == setting]
         rules = [r for r in DECOMPOSITION_RULES if r in set(sub["rule"])]
         columns = [(DECOMPOSITION_RULES[r], sub[sub["rule"] == r]) for r in rules]
-        columns.append(("greedy,\nwhole graph", slide.assign(gap=greedy_gap)))
+        columns.append(("greedy,\nwhole graph", large.assign(gap=greedy_gap)))
         for x, (_label, data) in enumerate(columns):
             for family in FAMILY_ORDER:
                 values = 100 * data.loc[data["family"] == family, "gap"]

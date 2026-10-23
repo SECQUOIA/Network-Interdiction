@@ -329,7 +329,7 @@ one, as in the quantum-preconditioning notebook). Its sections:
 
 1. example networks with their optimal cuts, and QUBO size against the
    statevector, MPS and 156-qubit device limits;
-2. Gurobi, greedy, SA + repair and random start + repair on the 27 slide
+2. Gurobi, greedy, SA + repair and random start + repair on the 27 large
    cases: a gap heat map and time against gap;
 3. QAOA on the tiny instances and the parameter-transfer cohort, scored by
    where each state's probability goes: optimal plan, within budget, the
@@ -337,8 +337,8 @@ one, as in the quantum-preconditioning notebook). Its sections:
    ([results/qaoa_outcomes.csv](results/qaoa_outcomes.csv), from
    [qaoa_outcomes.py](qaoa_outcomes.py));
 4. MPS QAOA at 39–149 qubits ([results/qaoa_mid.csv](results/qaoa_mid.csv));
-5. decomposition of the slide cases into four pieces or 156-qubit pieces
-   ([results/decomposition_slide.csv](results/decomposition_slide.csv)).
+5. decomposition of the large cases into four pieces or 156-qubit pieces
+   ([results/decomposition_large.csv](results/decomposition_large.csv)).
 
 The figures are drawn by [results_plots.py](results_plots.py) and saved to
 [figures/](figures/); each title states its takeaway, computed from the data

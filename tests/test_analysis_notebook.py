@@ -96,9 +96,9 @@ def test_raw_flow_columns_are_never_overwritten(namespace, raw):
     Derived columns once reused the CSV's own column names, which overwrote
     the flows and turned every count comparing flows into nonsense.
     """
-    slide = namespace['slide']
+    large = namespace['large']
     for column in ('Greedy', 'SA_NIP', 'SA_NIP_Greedy', 'Random_Greedy', 'Opt_NIP'):
-        pandas.testing.assert_series_equal(slide[column], raw[column],
+        pandas.testing.assert_series_equal(large[column], raw[column],
                                            check_names=False)
 
 
@@ -154,7 +154,7 @@ def test_example_instances_draw_optimal_cuts(namespace):
 
 
 def test_qubit_count_formula_matches_the_built_qubos():
-    """V - 2 + 3E, used for the slide instances, matches every compiled QUBO."""
+    """V - 2 + 3E, used for the large instances, matches every compiled QUBO."""
     import results_plots as rp
     mid, tiny = read('mid_instances.csv'), read('qaoa_tiny.csv')
     np.testing.assert_array_equal(rp.qubo_qubits(mid['V'], mid['E']), mid['qubits'])
@@ -162,7 +162,7 @@ def test_qubit_count_formula_matches_the_built_qubos():
 
 
 def test_problem_sizes_mark_the_fitted_pieces(namespace, raw):
-    decomposition = read('decomposition_slide.csv')
+    decomposition = read('decomposition_large.csv')
     fitted = decomposition[(decomposition['setting'] == 'fit156')
                            & decomposition['flow'].notna()]
     largest = fitted.groupby('instance')['max_piece_qubits'].max()
@@ -234,7 +234,7 @@ def test_mid_summary_counts(namespace):
 
 
 def test_decomposition_medians_and_title(namespace, raw):
-    decomposition = read('decomposition_slide.csv')
+    decomposition = read('decomposition_large.csv')
     iterated = decomposition[(decomposition['mode'] == 'iterated')
                              & decomposition['flow'].notna()]
     greedy = 100 * (raw['Greedy'] / raw['Opt_NIP'] - 1).median()

@@ -1,6 +1,6 @@
 """
-results/decomposition_slide.csv: the eight-thread run of
-run_decomposition_benchmark.py --refine on the 27 slide cases (source
+results/decomposition_large.csv: the eight-thread run of
+run_decomposition_benchmark.py --refine on the 27 large cases (source
 1ce5438). Checks its numbers against results/slide_instances_sa.csv and
 against themselves, since the cut sets are not stored.
 """
@@ -12,7 +12,7 @@ import pandas
 import pytest
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DECOMPOSITION_CSV = os.path.join(REPO_ROOT, 'results', 'decomposition_slide.csv')
+DECOMPOSITION_CSV = os.path.join(REPO_ROOT, 'results', 'decomposition_large.csv')
 SLIDE_CSV = os.path.join(REPO_ROOT, 'results', 'slide_instances_sa.csv')
 RULES = {'mincut', 'local', 'marginal', 'marginal+refine', 'no fit'}
 
@@ -34,7 +34,7 @@ def test_header_names_the_clean_source_commit():
     assert not any('/mnt/' in line or 'rames102' in line for line in header)
 
 
-def test_covers_the_27_slide_cases_with_their_references(runs):
+def test_covers_the_27_large_cases_with_their_references(runs):
     slide = pandas.read_csv(SLIDE_CSV, comment='#')
     cases = runs[['instance', 'B']].drop_duplicates()
     assert len(cases) == 27
