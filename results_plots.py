@@ -43,16 +43,20 @@ FAMILY_SHORT = {"planar": "planar", "Erdős–Rényi": "ER", "k-NN": "k-NN"}
 _FAMILY_FROM_NAME = {"planar": "planar", "erdos": "Erdős–Rényi", "knn": "k-NN"}
 
 # Classical methods on the large instances:
-# label -> (flow column, time columns, colour, marker).
+# label -> (flow column, time columns, colour, marker). Every time is when the
+# method's answer was ready. For Gurobi (time columns None) that is when its
+# MIPSOL callback first reported the optimal incumbent (Gurobi_trajectory);
+# Gurobi_time_sec runs on until optimality is proved.
+GUROBI = "Gurobi (exact MILP)"
 CLASSICAL = {
-    "Gurobi (exact MILP)": ("Opt_NIP", ["Gurobi_time_sec"], C_GUROBI, "D"),
+    GUROBI: ("Opt_NIP", None, C_GUROBI, "D"),
     "Greedy from scratch": ("Greedy", ["Greedy_time_sec"], C_GREEDY, "s"),
     "SA + greedy repair": ("SA_NIP_Greedy", ["SA_time_sec", "SA_repair_time_sec"],
                            C_SA, "o"),
     "Random start + repair": ("Random_Greedy", ["Random_Greedy_time_sec"],
                               C_RANDOM, "^"),
 }
-HEURISTICS = [label for label in CLASSICAL if not label.startswith("Gurobi")]
+HEURISTICS = [label for label in CLASSICAL if label != GUROBI]
 
 # Where a QAOA state's probability goes (qaoa_outcomes.OUTCOMES order).
 OUTCOME_STYLE = {
@@ -136,7 +140,8 @@ def classical_long(large: pd.DataFrame) -> pd.DataFrame:
         rows.append(pd.DataFrame({
             "case": sub["case"], "family": sub["family"], "method": label,
             "flow": sub[column], "gap": sub[column] / sub["Opt_NIP"] - 1,
-            "time_sec": sub[times].sum(axis=1),
+            "time_sec": (sub.apply(utils.gurobi_time_to_optimum, axis=1)
+                         if times is None else sub[times].sum(axis=1)),
         }))
     return pd.concat(rows, ignore_index=True)
 
@@ -331,16 +336,18 @@ def plot_classical_gaps(large: pd.DataFrame) -> plt.Figure:
              "Random start + repair": "random + repair"}
     counts = ", ".join(f"{short[label]} {summary.loc[label, 'optimal']}/"
                        f"{summary.loc[label, 'cases']}" for label in HEURISTICS)
-    gurobi = next(iter(CLASSICAL))
     ax.set_title(f"Gap to the optimum, %, on the {len(large)} large cases. Optimal: "
-                 f"{counts}. Gurobi: {summary.loc[gurobi, 'optimal']}/"
-                 f"{summary.loc[gurobi, 'cases']}", fontsize=13, pad=26)
+                 f"{counts}. Gurobi: {summary.loc[GUROBI, 'optimal']}/"
+                 f"{summary.loc[GUROBI, 'cases']}", fontsize=13, pad=26)
     fig.tight_layout(rect=(0, 0.08, 1, 1))
     return fig
 
 
 def plot_time_vs_gap(large: pd.DataFrame) -> plt.Figure:
-    """Wall time against gap, every case and method; large markers are medians."""
+    """
+    Time until each method's answer is found against its gap, every case and
+    method (Gurobi: its first optimal incumbent); large markers are medians.
+    """
     long = classical_long(large)
     fig, ax = plt.subplots(figsize=(10.5, 6.0))
     for label, (_column, _times, colour, marker) in CLASSICAL.items():
@@ -354,7 +361,7 @@ def plot_time_vs_gap(large: pd.DataFrame) -> plt.Figure:
     ax.set_yscale("symlog", linthresh=1)
     ax.set_ylim(-0.5, None)
     ax.set_yticks([0, 1, 10, 100, 1000], ["0", "1", "10", "100", "1000"])
-    ax.set_xlabel("wall time (s, log scale)")
+    ax.set_xlabel("wall time until the answer is found (s, log scale)")
     ax.set_ylabel("gap to optimum, %  (symlog)")
     style_axes(ax)
     handles = [Line2D([], [], linestyle="", marker=m, color=c, markersize=8, label=l)
@@ -362,11 +369,11 @@ def plot_time_vs_gap(large: pd.DataFrame) -> plt.Figure:
     handles.append(Line2D([], [], linestyle="", marker="o", color="white",
                           markeredgecolor="black", markersize=11, label="median"))
     framed_legend(fig, handles, ncol=5, y=0.0)
-    gurobi = long[long["method"] == next(iter(CLASSICAL))]["time_sec"]
+    gurobi = long[long["method"] == GUROBI]["time_sec"]
     heuristic = long[long["method"].isin(HEURISTICS)]["time_sec"]
-    ax.set_title(f"Gurobi proves every optimum within {gurobi.max():.2f} s; "
-                 f"the fastest heuristic run takes {heuristic.min():.1f} s",
-                 fontsize=14)
+    ax.set_title(f"Gurobi's callback reports every optimum within "
+                 f"{gurobi.max():.2f} s; the fastest heuristic run takes "
+                 f"{heuristic.min():.1f} s", fontsize=14)
     fig.tight_layout(rect=(0, 0.06, 1, 1))
     return fig
 

@@ -125,14 +125,22 @@ def test_heat_map_cells_are_the_gaps(namespace, raw):
 
 
 def test_time_plot_points(namespace, raw):
+    """
+    Gurobi is placed at its callback's first optimal incumbent, not at the
+    end of the solve (Gurobi_time_sec), which also covers the proof.
+    """
+    found = np.array([next(t for t, flow in json.loads(trajectory) if flow == opt)
+                      for trajectory, opt in zip(raw['Gurobi_trajectory'],
+                                                 raw['Opt_NIP'])])
+    assert (found < raw['Gurobi_time_sec']).all()
     collections = namespace['fig_time'].axes[0].collections
     gurobi, greedy = collections[0].get_offsets(), collections[2].get_offsets()
-    np.testing.assert_allclose(gurobi[:, 0], raw['Gurobi_time_sec'])
+    np.testing.assert_allclose(gurobi[:, 0], found)
     np.testing.assert_allclose(gurobi[:, 1], 0)
     np.testing.assert_allclose(greedy[:, 0], raw['Greedy_time_sec'])
     np.testing.assert_allclose(greedy[:, 1], 100 * (raw['Greedy'] / raw['Opt_NIP'] - 1))
     title = namespace['fig_time'].axes[0].get_title()
-    assert f"{raw['Gurobi_time_sec'].max():.2f} s" in title
+    assert f"{found.max():.2f} s" in title and 'callback' in title
 
 
 def test_example_instances_draw_optimal_cuts(namespace):
