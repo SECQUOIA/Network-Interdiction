@@ -171,6 +171,18 @@ def test_problem_sizes_mark_the_fitted_pieces(namespace, raw):
               if len(c.get_facecolors()) and np.allclose(c.get_facecolors()[0], [1, 1, 1, 1])]
     assert sorted(hollow) == sorted(largest)
     assert max(hollow) <= 155
+    # Every large network is named once, at its own point; only the one
+    # without a fitting partition says so.
+    import results_plots as rp
+    labels = {text.get_text(): text.xy for text in ax.texts
+              if hasattr(text, 'xy')}
+    sizes = raw.drop_duplicates('instance')
+    assert len(labels) == len(sizes) == 9
+    for _, row in sizes.iterrows():
+        name = rp.short_name(row['instance'])
+        fits = row['instance'] in largest.index
+        label = name if fits else f'{name}: no split fits 155 qubits'
+        assert labels[label] == (row['E'], rp.qubo_qubits(row['V'], row['E']))
 
 
 def test_qaoa_depth_lines_and_title(namespace):

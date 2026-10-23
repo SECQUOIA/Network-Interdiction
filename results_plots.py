@@ -240,10 +240,20 @@ def plot_problem_sizes(large: pd.DataFrame, mid: pd.DataFrame,
             ax.scatter(row["E"], piece, s=70, facecolor="white",
                        edgecolor=C_GUROBI, marker=FAMILY_MARKERS[row["family"]],
                        linewidth=1.3, zorder=3)
-        else:
-            ax.annotate("no partition fits 155 qubits", (row["E"], row["qubits"]),
-                        xytext=(-12, 10), textcoords="offset points", ha="right",
-                        fontsize=9, color=C_ALERT)
+    # The large networks crowd each other, so their names sit in a column to
+    # the left, in the same top-to-bottom order as the points, with leaders.
+    ordered = large_sizes.sort_values("qubits", ascending=False)
+    label_y = np.geomspace(ordered["qubits"].max() * 1.45,
+                           ordered["qubits"].min() * 0.62, len(ordered))
+    for y, (_, row) in zip(label_y, ordered.iterrows()):
+        fits = row["instance"] in fitted.index
+        ax.annotate(row["name"] if fits else
+                    f"{row['name']}: no split fits 155 qubits",
+                    (row["E"], row["qubits"]),
+                    xytext=(ordered["E"].min() / 1.7, y), ha="right", va="center",
+                    fontsize=9.5, color=C_GUROBI if fits else C_ALERT,
+                    arrowprops={"arrowstyle": "-", "color": "#A0A0A0",
+                                "linewidth": 0.8, "shrinkA": 3, "shrinkB": 4})
     for level, text, colour in ((24, "exact statevector limit here (24 qubits)",
                                  C_REFERENCE),
                                 (156, "IBM Heron device (156 qubits)", C_ALERT)):
@@ -252,6 +262,7 @@ def plot_problem_sizes(large: pd.DataFrame, mid: pd.DataFrame,
                 transform=ax.get_yaxis_transform())
     ax.set_xscale("log")
     ax.set_yscale("log")
+    ax.set_ylim(None, ordered["qubits"].max() * 1.9)
     ax.set_xlabel("arcs in the network")
     ax.set_ylabel("QUBO variables = qubits  (V − 2 + 3E)")
     style_axes(ax)
