@@ -1,12 +1,13 @@
 """
-Loading and plotting helpers for notebooks/analysis.ipynb.
+Plot style, palette and loading helpers shared by the notebook figures.
 
-The notebook analyses the benchmark CSVs written by run_benchmark.py --
-principally results/slide_instances_sa.csv, the classical rerun of the
-D-Wave slide instances (issue #18). Everything that computes or draws lives
-here so the notebook stays a sequence of short, explained calls.
+The current notebook's figures are drawn by results_plots.py, which uses
+the palette, styles and loaders here. This module also keeps the earlier
+slide-analysis helpers (head-to-head tables, the slide check, penalty
+windows, the incumbent trajectory), which tests/test_analysis_notebook.py
+still covers.
 
-The current notebook uses the original-objective metrics from
+objective_metrics() gives the original-objective metrics from
 Gurobi_QP/notebooks/analysis.ipynb and qp_gurobi/utils.py: f/f* - 1 and
 100 * (1 - (f - f*) / abs(f*)). Here f is the surviving maximum flow of a
 feasible interdiction, not a QUBO energy. Zero optima are excluded from

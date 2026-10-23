@@ -320,17 +320,32 @@ command that produced it. On those instances annealing followed by greedy
 repair never beats plain greedy, and plain greedy reproduces the repaired
 values reported on the slides, which were produced by a version of the repair
 that ignored the annealer's sample (#12).
-[notebooks/analysis.ipynb](notebooks/analysis.ipynb)
-uses the original-objective metrics from the quantum-preconditioning
-repository's `Gurobi_QP/notebooks/analysis.ipynb`: approximation ratio minus
-one (`f/f* - 1`) and performance (`100 * (1 - (f-f*)/abs(f*))`). Here `f`
-is surviving maximum flow and `f*` is its exact optimum. Zero optima are
-excluded from these relative metrics. The three plots show the five-method
-transfer comparison after repair, the classical performance distribution,
-and a recorded Gurobi trajectory. Helpers live in [utils.py](utils.py), and
-figures are saved to [figures/](figures/). The notebook reads saved CSVs and
-does not invoke a solver. QAOA time-to-threshold/PAR plots are omitted because
-the saved transfer results do not contain the required incumbent histories.
+
+[notebooks/analysis.ipynb](notebooks/analysis.ipynb) is the results notebook:
+one section per method, each built from committed results only (it runs no
+solver and needs no license or token). Quality is the gap `f/f* - 1` of the
+surviving max flow `f` to the exact optimum `f*` (approximation ratio minus
+one, as in the quantum-preconditioning notebook). Its sections:
+
+1. example networks with their optimal cuts, and QUBO size against the
+   statevector, MPS and 156-qubit device limits;
+2. Gurobi, greedy, SA + repair and random start + repair on the 27 slide
+   cases: a gap heat map and time against gap;
+3. QAOA on the tiny instances and the parameter-transfer cohort, scored by
+   where each state's probability goes: optimal plan, within budget, the
+   empty plan, or over budget
+   ([results/qaoa_outcomes.csv](results/qaoa_outcomes.csv), from
+   [qaoa_outcomes.py](qaoa_outcomes.py));
+4. MPS QAOA at 39–149 qubits ([results/qaoa_mid.csv](results/qaoa_mid.csv));
+5. decomposition of the slide cases into four pieces or 156-qubit pieces
+   ([results/decomposition_slide.csv](results/decomposition_slide.csv)).
+
+The figures are drawn by [results_plots.py](results_plots.py) and saved to
+[figures/](figures/); each title states its takeaway, computed from the data
+it plots. [tests/test_analysis_notebook.py](tests/test_analysis_notebook.py)
+runs the notebook and checks every figure against the raw CSVs. QAOA is not
+scored by energy there: the budget penalty makes the empty plan a low-energy
+state, so energy scores can rise while the proposed plans get worse.
 
 ### Regenerating the results CSV
 
