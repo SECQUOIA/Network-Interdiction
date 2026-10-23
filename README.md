@@ -321,11 +321,16 @@ repair never beats plain greedy, and plain greedy reproduces the repaired
 values reported on the slides, which were produced by a version of the repair
 that ignored the annealer's sample (#12).
 [notebooks/analysis.ipynb](notebooks/analysis.ipynb)
-walks through that comparison family by family, including the check against the
-slide values and the penalty windows; the plotting helpers it calls live in
-[utils.py](utils.py) and its figures are saved to
-[figures/](figures/). It reads only the committed CSV, so it needs pandas and
-matplotlib but no Gurobi license or D-Wave token (one optional cell uses Gurobi).
+uses the original-objective metrics from the quantum-preconditioning
+repository's `Gurobi_QP/notebooks/analysis.ipynb`: approximation ratio minus
+one (`f/f* - 1`) and performance (`100 * (1 - (f-f*)/abs(f*))`). Here `f`
+is surviving maximum flow and `f*` is its exact optimum. Zero optima are
+excluded from these relative metrics. The three plots show the five-method
+transfer comparison after repair, the classical performance distribution,
+and a recorded Gurobi trajectory. Helpers live in [utils.py](utils.py), and
+figures are saved to [figures/](figures/). The notebook reads saved CSVs and
+does not invoke a solver. QAOA time-to-threshold/PAR plots are omitted because
+the saved transfer results do not contain the required incumbent histories.
 
 ### Regenerating the results CSV
 

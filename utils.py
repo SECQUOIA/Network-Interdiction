@@ -6,8 +6,14 @@ principally results/slide_instances_sa.csv, the classical rerun of the
 D-Wave slide instances (issue #18). Everything that computes or draws lives
 here so the notebook stays a sequence of short, explained calls.
 
-Every method is scored the way the slides score it: the flow reduction it
-achieves as a fraction of the optimal flow reduction,
+The current notebook uses the original-objective metrics from
+Gurobi_QP/notebooks/analysis.ipynb and qp_gurobi/utils.py: f/f* - 1 and
+100 * (1 - (f - f*) / abs(f*)). Here f is the surviving maximum flow of a
+feasible interdiction, not a QUBO energy. Zero optima are excluded from
+these relative metrics, as in the reference notebook.
+
+The older slide-analysis helpers retain their explicitly named reduction
+ratios for reproducing historical figures:
 
     ratio = (maxflow - flow left by the method) / (maxflow - Opt_NIP),
 
@@ -122,6 +128,55 @@ def read_provenance(csv_path: Path) -> list[str]:
         if not line.startswith("# command"):
             lines.append(line[2:])
     return lines
+
+
+def objective_metrics(objective: pd.Series, optimum: pd.Series) -> pd.DataFrame:
+    """Original-objective metrics, using the quantum-preconditioning notebook definitions."""
+    reference = optimum.where(optimum != 0)
+    return pd.DataFrame({
+        "approx_ratio_minus_1": objective / reference - 1.0,
+        "performance_pct": 100.0 * (1.0 - (objective - reference) / reference.abs()),
+    })
+
+
+def load_transfer_objectives(csv_path: Path) -> pd.DataFrame:
+    """Score saved feasible, repaired interdictions without using circuit energies."""
+    data = pd.read_csv(csv_path, comment="#")
+    metrics = objective_metrics(data["flow_after_repair"], data["opt_nip"])
+    return data.join(metrics)
+
+
+def plot_transfer_objective_gap(data: pd.DataFrame) -> plt.Figure:
+    """Reference notebook's approximation-ratio-minus-one view, one panel per depth."""
+    methods = ["fixed", "ibm", "gat", "optimized", "rws"]
+    labels = ["Fixed donor", "Nearest donor", "GAT", "Target trained", "RWS"]
+    depths = sorted(data["reps"].unique())
+    fig, axes = plt.subplots(1, len(depths), figsize=(7.1 * len(depths), 5.5),
+                             sharey=True, squeeze=False)
+    palette = ["#42C6C6", "#F08AA2", "#F2C94C"]
+    for i, (ax, depth) in enumerate(zip(axes[0], depths)):
+        sub = data[data["reps"] == depth]
+        stats = sub.groupby("method")["approx_ratio_minus_1"].agg(
+            ["mean", "std", "count"]).reindex(methods)
+        sem = stats["std"].fillna(0.0) / np.sqrt(stats["count"])
+        ax.errorbar(range(len(methods)), stats["mean"], yerr=sem,
+                    fmt="o-", color=palette[i % len(palette)], capsize=4,
+                    capthick=1.2, linewidth=2.3, markersize=7, elinewidth=1.2)
+        ax.axhline(0, color="#353B55", linestyle="--", linewidth=1.4, alpha=0.65)
+        ax.set_xticks(range(len(methods)), labels, rotation=15)
+        ax.set_title(f"p = {depth}: after greedy repair")
+        ax.set_xlabel("Method")
+        style_axes(ax)
+        valid = sub["approx_ratio_minus_1"].dropna()
+        if len(valid) and np.allclose(valid, 0, rtol=0, atol=1e-12):
+            ax.text(0.5, 0.85, "All saved repaired solutions reach the optimum",
+                    transform=ax.transAxes, ha="center", fontsize=11)
+    axes[0, 0].set_ylabel("Approx Ratio - 1")
+    valid = data["approx_ratio_minus_1"].dropna()
+    if len(valid) and np.allclose(valid, 0, rtol=0, atol=1e-12):
+        axes[0, 0].set_ylim(-0.005, 0.05)
+    fig.tight_layout()
+    return fig
 
 
 def load_results(csv_path: Path) -> pd.DataFrame:
@@ -272,8 +327,9 @@ def plot_ratio_by_family(df: pd.DataFrame) -> plt.Figure:
 def plot_performance_distribution(df: pd.DataFrame) -> plt.Figure:
     """
     Final solution quality per family and method, in the style of the
-    quantum-preconditioning performance-distribution figure. Performance is
-    100 × ratio. The top strip holds instances solved exactly (with the
+    quantum-preconditioning notebook's performance-distribution figure:
+    100 * (1 - (f - f*) / abs(f*)). The top strip holds instances meeting
+    the reference notebook's 99.999% threshold (with the
     fraction above each column); the main panel shows the rest on a log
     scale of the gap to 100%, with a black bar at the mean.
     """
@@ -291,16 +347,18 @@ def plot_performance_distribution(df: pd.DataFrame) -> plt.Figure:
         sub = df[df.family == family]
         for row_offset, key in zip([0.3, 0.0, -0.3], methods):
             color = METHODS[key][2]
-            perf = 100.0 * sub[f"ratio_{key}"].dropna()
+            column = METHODS[key][0]
+            perf = objective_metrics(sub[column], sub["Opt_NIP"])[
+                "performance_pct"].dropna()
             x0 = fx + offsets[key]
-            optimal = perf[np.isclose(perf, 100.0)]
+            optimal = perf[perf >= 99.999]
             top.scatter(x0 + rng.uniform(-0.07, 0.07, len(optimal)),
                         np.full(len(optimal), row_offset), color=color,
                         s=38, edgecolor="white", linewidth=0.5, zorder=3)
             top.text(x0, 0.82, f"{len(optimal)}/{len(perf)}", ha="center",
                      va="bottom", fontsize=10, color=color,
                      transform=top.get_xaxis_transform())
-            rest = perf[~np.isclose(perf, 100.0)]
+            rest = perf[perf < 99.999]
             main.scatter(x0 + rng.uniform(-0.07, 0.07, len(rest)), 100.0 - rest,
                          color=color, s=42, edgecolor="white", linewidth=0.5,
                          zorder=3)
@@ -320,13 +378,20 @@ def plot_performance_distribution(df: pd.DataFrame) -> plt.Figure:
     top.grid(False)
 
     main.set_yscale("log")
-    main.set_ylim(100.0, 0.5)  # inverted: better (smaller gap) at the top
-    gaps = [1, 5, 10, 25, 50, 100]
+    values = [objective_metrics(df[METHODS[key][0]], df["Opt_NIP"])[
+        "performance_pct"].dropna() for key in methods]
+    all_gaps = 100.0 - pd.concat(values)
+    positive = all_gaps[all_gaps > 0.001]
+    upper = max(100.0, float(positive.max()) * 1.5) if len(positive) else 100.0
+    lower = min(0.5, float(positive.min()) * 0.5) if len(positive) else 0.5
+    main.set_ylim(upper, lower)
+    gaps = [g for g in [0.001, 0.01, 0.1, 1, 10, 100, 1000, 10000]
+            if lower <= g <= upper]
     main.set_yticks(gaps, [f"{100 - g:g}%" for g in gaps])
     main.minorticks_off()
     main.set_xticks(range(len(FAMILY_ORDER)), FAMILY_ORDER)
     main.set_xlim(-0.6, len(FAMILY_ORDER) - 0.4)
-    main.set_ylabel("performance (% of optimal reduction)")
+    main.set_ylabel("Performance (%)")
     style_axes(main)
     main.spines["top"].set_visible(False)
     # broken-axis marks between the strip and the main panel
@@ -602,11 +667,16 @@ def plot_incumbent_trajectory(df: pd.DataFrame, instance: str, B: int) -> plt.Fi
     """
     One row's race against the clock: Gurobi's best incumbent so far (black
     steps, one dot per incumbent, dotted line where Gurobi proves
-    optimality) against where each other method finishes, all scored as
-    flow reduction / optimal. Log time axis.
+    optimality) against where each other method finishes, scored as
+    original-objective f/f* - 1. The symmetric-log quality axis retains
+    exact zero, which an ordinary logarithmic axis cannot display.
     """
     row = df[df["instance"].str.endswith(instance) & (df["B"] == B)].iloc[0]
-    times, ratio = gurobi_best_so_far(row)
+    if row["Opt_NIP"] == 0:
+        raise ValueError("Relative objective metrics require a nonzero optimum")
+    trajectory = json.loads(row["Gurobi_trajectory"])
+    times = np.array([time for time, _ in trajectory])
+    ratio = np.minimum.accumulate([flow for _, flow in trajectory]) / row["Opt_NIP"] - 1.0
     runtime = float(row["Gurobi_time_sec"])
 
     fig, ax = plt.subplots(figsize=(10.5, 5.8))
@@ -618,23 +688,28 @@ def plot_incumbent_trajectory(df: pd.DataFrame, instance: str, B: int) -> plt.Fi
             va="bottom", ha="left")
     for key, (_columns, label) in METHOD_TIMES.items():
         t = method_time(row, key)
-        if np.isnan(t) or np.isnan(row[f"ratio_{key}"]):
+        column = METHODS[key][0]
+        if np.isnan(t) or pd.isna(row[column]):
             continue
+        quality = row[column] / row["Opt_NIP"] - 1.0
         _col, _label, color, marker, _ls = METHODS[key]
         if key == "sa_raw":  # hollow ring, so it stays visible under coincident markers
-            ax.plot(t, row[f"ratio_{key}"], marker=marker, linestyle="",
+            ax.plot(t, quality, marker=marker, linestyle="",
                     markerfacecolor="none", markeredgecolor=C_SA, markersize=17,
                     markeredgewidth=2.2, label=label, zorder=6)
             continue
-        ax.plot(t, row[f"ratio_{key}"], marker=marker, linestyle="", color=color,
+        ax.plot(t, quality, marker=marker, linestyle="", color=color,
                 markersize=12, markeredgecolor="white", markeredgewidth=1.0,
                 label=label, zorder=5)
-    ax.axhline(1.0, color=C_REFERENCE, linestyle="--", linewidth=1.3, alpha=0.7)
+    ax.axhline(0.0, color=C_REFERENCE, linestyle="--", linewidth=1.3, alpha=0.7)
     ax.set_xscale("log")
-    ax.set_ylim(-0.03, 1.08)
-    ax.set_xlabel("wall time (s, log scale)")
-    ax.set_ylabel("flow reduction / optimal")
-    ax.set_title(f"{row['family']}: {row['qubo_vars']} QUBO variables, B={B}")
+    ax.set_yscale("symlog", linthresh=1e-3)
+    final_gaps = [row[spec[0]] / row["Opt_NIP"] - 1.0
+                  for spec in METHODS.values() if pd.notna(row[spec[0]])]
+    ax.set_ylim(-1e-4, max(float(ratio.max()), *final_gaps, 0.01) * 1.5)
+    ax.set_xlabel("Incumbent discovery time / method completion time (s)")
+    ax.set_ylabel("Approx Ratio - 1")
+    ax.set_title(f"{row['family']}: {int(row['V'] + 3 * row['E'] - 2)} QUBO variables, B={B}")
     style_axes(ax)
     handles, labels = ax.get_legend_handles_labels()
     fig.tight_layout()
