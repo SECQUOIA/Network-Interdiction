@@ -91,6 +91,90 @@ def test_every_figure_is_saved_once(run):
     assert run[1] == SAVED_FIGURES
 
 
+def test_no_figure_has_a_title(namespace):
+    figures = {name: value for name, value in namespace.items()
+               if isinstance(value, matplotlib.figure.Figure)}
+    assert len(figures) == len(SAVED_FIGURES)
+    for name, fig in figures.items():
+        assert fig._suptitle is None or not fig._suptitle.get_text(), name
+        for ax in fig.axes:
+            for loc in ('left', 'center', 'right'):
+                assert not ax.get_title(loc), (name, ax.get_title(loc))
+
+
+@pytest.fixture(scope='module')
+def notebook_text():
+    """All markdown in the notebook, with runs of whitespace collapsed."""
+    with open(NOTEBOOK, encoding='utf-8') as handle:
+        cells = json.load(handle)['cells']
+    text = ' '.join(''.join(cell['source']) for cell in cells
+                    if cell['cell_type'] == 'markdown')
+    return ' '.join(text.replace('*', '').split())
+
+
+def test_numbers_in_the_text_match_the_data(notebook_text, raw):
+    """
+    The figures carry no titles, so the takeaways live in the notebook text;
+    each number quoted there is recomputed here from the raw CSVs.
+    """
+    from math import comb
+    import utils
+    claims = []
+    mid = read('mid_instances.csv')
+    claims.append(f"{int(mid['cut_touches_st'].sum())} of the {len(mid)} mid-size cases")
+    claims.append(f"all {len(mid)} mid-size cases")
+    assert (mid['Greedy'] == mid['Opt_NIP']).all()
+    share = mid.apply(lambda r: sum(comb(r.E, k) for k in range(r.B + 1)) / 2 ** r.E,
+                      axis=1)
+    claims.append(f"at most {share.max():.1%} on these cases, and at most "
+                  f"{share[mid['qubits'] > 40].max():.3%} above 40 qubits")
+    sizes = raw.drop_duplicates('instance')
+    qubits = sizes['V'] - 2 + 3 * sizes['E']
+    decomposition = read('decomposition_large.csv')
+    fitted = decomposition[(decomposition['setting'] == 'fit156')
+                           & decomposition['flow'].notna()]['instance'].nunique()
+    claims.append(f"need {qubits.min():,}–{qubits.max():,} qubits")
+    claims.append(f"brings {fitted} of the {len(sizes)} under 156")
+    claims.append(f"Greedy is optimal in {(raw['Greedy'] == raw['Opt_NIP']).sum()} "
+                  f"of {len(raw)} cases")
+    sa = raw.dropna(subset=['SA_NIP_Greedy'])
+    assert (sa['SA_NIP_Greedy'] < sa['Greedy']).sum() == 0
+    claims.append(f"ties in {(sa['SA_NIP_Greedy'] == sa['Greedy']).sum()} of its "
+                  f"{len(sa)} cases and does worse in {(sa['SA_NIP_Greedy'] > sa['Greedy']).sum()}")
+    assert (raw['Random_Greedy'] == raw['Opt_NIP']).sum() == 0
+    claims.append(f"Gurobi proves all {len(raw)} optima")
+    found = raw.apply(utils.gurobi_time_to_optimum, axis=1)
+    heuristic = pandas.concat([raw['Greedy_time_sec'], raw['Random_Greedy_time_sec'],
+                               raw['SA_time_sec'] + raw['SA_repair_time_sec']]).dropna()
+    claims.append(f"every optimum within {found.max():.2f} s")
+    claims.append(f"fastest heuristic run takes {heuristic.min():.1f} s")
+    assert (raw['Gurobi_time_sec'] - found).max() < 1e-3
+    outcomes = read('qaoa_outcomes.csv')
+    tiny = outcomes[outcomes['source'] == 'tiny'].groupby('reps')[['p_optimal', 'p_empty']].mean()
+    claims.append(f"from {tiny.loc[0, 'p_optimal']:.2f} at the uniform start to "
+                  f"{tiny.loc[3, 'p_optimal']:.2f} at p = 3")
+    claims.append(f"grows from {tiny.loc[0, 'p_empty']:.2f} to {tiny.loc[3, 'p_empty']:.2f}")
+    transfer = outcomes[(outcomes['source'] == 'transfer') & (outcomes['reps'] == 2)]
+    standard = transfer[transfer['method'].isin(['fixed', 'ibm', 'gat', 'optimized'])]
+    per_method = standard.groupby('method')['p_optimal'].mean()
+    claims.append(f"mean P(optimal) {per_method.min():.2f}–{per_method.max():.2f} at p = 2")
+    claims.append(f"holds {transfer.loc[transfer['method'] == 'rws', 'p_empty'].mean():.0%} of it")
+    qaoa_mid = read('qaoa_mid.csv')
+    claims.append(f"at most {qaoa_mid.loc[qaoa_mid['qubits'] > 100, 'p_feasible'].max():.1%} "
+                  "of shots stay within budget")
+    claims.append(f"run up to {qaoa_mid.loc[qaoa_mid['angles'] == 'train', 'qubits'].max()} qubits")
+    iterated = decomposition[(decomposition['mode'] == 'iterated') & decomposition['flow'].notna()]
+    refined = iterated[iterated['rule'] == 'marginal+refine']
+    claims.append(f"recovers the optimum in {(refined['flow'] == refined['optimum']).sum()} "
+                  f"of the {len(refined)} cases")
+    medians = (iterated[iterated['setting'] == 'fit156'].assign(
+        gap=lambda d: d['flow'] / d['optimum'] - 1).groupby('rule')['gap'].median())
+    assert medians.idxmin() == 'mincut'
+    claims.append(f"(min-cut) leaves a median {medians.min():.0%} gap")
+    for claim in claims:
+        assert claim in notebook_text, claim
+
+
 def test_raw_flow_columns_are_never_overwritten(namespace, raw):
     """
     Derived columns once reused the CSV's own column names, which overwrote
@@ -139,8 +223,6 @@ def test_time_plot_points(namespace, raw):
     np.testing.assert_allclose(gurobi[:, 1], 0)
     np.testing.assert_allclose(greedy[:, 0], raw['Greedy_time_sec'])
     np.testing.assert_allclose(greedy[:, 1], 100 * (raw['Greedy'] / raw['Opt_NIP'] - 1))
-    title = namespace['fig_time'].axes[0].get_title()
-    assert f"{found.max():.2f} s" in title and 'callback' in title
 
 
 def test_example_instances_draw_optimal_cuts(namespace):
@@ -158,7 +240,8 @@ def test_example_instances_draw_optimal_cuts(namespace):
         assert nx.maximum_flow_value(di_g, src, tgt, capacity='weight') == row['maxflow']
         di_g.remove_edges_from(map(tuple, cut))
         assert nx.maximum_flow_value(di_g, src, tgt, capacity='weight') == row['Opt_NIP']
-        assert f"{row['maxflow']} → {row['Opt_NIP']}" in ax.get_title()
+        assert any(f"{row['maxflow']} → {row['Opt_NIP']}" in text.get_text()
+                   for text in ax.texts)
 
 
 def test_qubit_count_formula_matches_the_built_qubos():
@@ -193,7 +276,7 @@ def test_problem_sizes_mark_the_fitted_pieces(namespace, raw):
         assert labels[label] == (row['E'], rp.qubo_qubits(row['V'], row['E']))
 
 
-def test_qaoa_depth_lines_and_title(namespace):
+def test_qaoa_depth_lines(namespace):
     outcomes = read('qaoa_outcomes.csv')
     tiny = outcomes[outcomes['source'] == 'tiny']
     left = namespace['fig_depth'].axes[0]
@@ -202,11 +285,6 @@ def test_qaoa_depth_lines_and_title(namespace):
         sub = sub.sort_values('reps')
         np.testing.assert_array_equal(line.get_xdata(), sub['reps'])
         np.testing.assert_allclose(line.get_ydata(), sub['p_optimal'])
-    mean = tiny.groupby('reps')[['p_optimal', 'p_empty']].mean()
-    title = namespace['fig_depth']._suptitle.get_text()
-    for value in (mean.loc[0, 'p_optimal'], mean.loc[3, 'p_optimal'],
-                  mean.loc[0, 'p_empty'], mean.loc[3, 'p_empty']):
-        assert f'{value:.2f}' in title
 
 
 def test_transfer_bars_are_method_means(namespace):
@@ -237,8 +315,6 @@ def test_mid_qaoa_points(namespace):
         expected = qaoa_mid[['qubits', column]].to_numpy(dtype=float)
         np.testing.assert_allclose(points[np.lexsort(points.T[::-1])],
                                    expected[np.lexsort(expected.T[::-1])])
-    title = namespace['fig_mid']._suptitle.get_text()
-    assert f"{qaoa_mid.loc[qaoa_mid['qubits'] > 100, 'p_feasible'].max():.1%}" in title
 
 
 def test_mid_summary_counts(namespace):
@@ -253,7 +329,7 @@ def test_mid_summary_counts(namespace):
     assert (mid['Greedy'] == mid['Opt_NIP']).all()
 
 
-def test_decomposition_medians_and_title(namespace, raw):
+def test_decomposition_medians(namespace, raw):
     decomposition = read('decomposition_large.csv')
     iterated = decomposition[(decomposition['mode'] == 'iterated')
                              & decomposition['flow'].notna()]
@@ -268,9 +344,6 @@ def test_decomposition_medians_and_title(namespace, raw):
                            / sub.loc[sub['rule'] == rule, 'optimum'] - 1).median()
                     for rule in rules] + [greedy]
         np.testing.assert_allclose([line.get_ydata()[0] for line in ax.lines], expected)
-    refined = iterated[iterated['rule'] == 'marginal+refine']
-    reached = (refined['flow'] == refined['optimum']).sum()
-    assert f'{reached}/{len(refined)}' in namespace['fig_decomposition']._suptitle.get_text()
 
 
 # ── helpers kept from the earlier notebook ──────────────────────────────────

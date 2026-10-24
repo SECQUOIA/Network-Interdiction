@@ -3,8 +3,9 @@ Figures for notebooks/analysis.ipynb, the results notebook.
 
 Each plot_* function reads committed results (results/*.csv) through the
 load_* helpers and returns one matplotlib figure; the notebook explains it
-and saves it to figures/. Titles state the figure's takeaway, computed from
-the data it plots, so new data cannot leave a stale claim in a title.
+and saves it to figures/. Figures carry no titles: the notebook text states
+each takeaway, and tests/test_analysis_notebook.py checks every number it
+quotes against the data.
 
 Solution quality is measured on the original objective: the max flow f
 that survives an interdiction within budget, against the exact optimum f*,
@@ -193,13 +194,10 @@ def plot_example_instances(mid: pd.DataFrame, cases=EXAMPLE_CASES) -> plt.Figure
                                node_size=420, node_color=[C_RANDOM, C_GUROBI])
         nx.draw_networkx_labels(di_g, position, {src: "s", tgt: "t"}, ax=ax,
                                 font_color="white", font_weight="bold")
-        ax.set_title(f"{row['family']}: {row['V']} nodes, {row['E']} arcs\n"
-                     f"max flow {row['maxflow']} → {row['Opt_NIP']} "
-                     f"after cutting {B} arcs", fontsize=13)
+        ax.text(0.5, -0.02, f"{row['family']}: {row['V']} nodes, {row['E']} arcs\n"
+                f"max flow {row['maxflow']} → {row['Opt_NIP']} after cutting {B} arcs",
+                transform=ax.transAxes, ha="center", va="top", fontsize=12)
         ax.set_axis_off()
-    touching = int(mid["cut_touches_st"].sum())
-    fig.suptitle(f"Optimal interdictions (red). In {touching} of {len(mid)} "
-                 "mid-size cases the cut touches s or t", fontsize=15)
     fig.tight_layout()
     return fig
 
@@ -282,11 +280,6 @@ def plot_problem_sizes(large: pd.DataFrame, mid: pd.DataFrame,
                        color=C_REFERENCE, markersize=8, label=f)
                 for f in FAMILY_ORDER]
     framed_legend(fig, handles, ncol=3, y=0.0)
-    big = large_sizes["qubits"]
-    fit = len(fitted)
-    ax.set_title(f"The large instances need {big.min():,}–{big.max():,} qubits; "
-                 f"decomposition brings {fit} of {len(large_sizes)} under 156",
-                 fontsize=14)
     fig.tight_layout()
     return fig
 
@@ -331,14 +324,6 @@ def plot_classical_gaps(large: pd.DataFrame) -> plt.Figure:
     handles.append(Patch(facecolor="#EDEDED", edgecolor=GRID_GREY,
                          label="not run (no valid λ)"))
     framed_legend(fig, handles, ncol=7, y=0.0)
-    summary = classical_summary(large)
-    short = {"Greedy from scratch": "greedy", "SA + greedy repair": "SA + repair",
-             "Random start + repair": "random + repair"}
-    counts = ", ".join(f"{short[label]} {summary.loc[label, 'optimal']}/"
-                       f"{summary.loc[label, 'cases']}" for label in HEURISTICS)
-    ax.set_title(f"Gap to the optimum, %, on the {len(large)} large cases. Optimal: "
-                 f"{counts}. Gurobi: {summary.loc[GUROBI, 'optimal']}/"
-                 f"{summary.loc[GUROBI, 'cases']}", fontsize=13, pad=26)
     fig.tight_layout(rect=(0, 0.08, 1, 1))
     return fig
 
@@ -369,11 +354,6 @@ def plot_time_vs_gap(large: pd.DataFrame) -> plt.Figure:
     handles.append(Line2D([], [], linestyle="", marker="o", color="white",
                           markeredgecolor="black", markersize=11, label="median"))
     framed_legend(fig, handles, ncol=5, y=0.0)
-    gurobi = long[long["method"] == GUROBI]["time_sec"]
-    heuristic = long[long["method"].isin(HEURISTICS)]["time_sec"]
-    ax.set_title(f"Gurobi's callback reports every optimum within "
-                 f"{gurobi.max():.2f} s; the fastest heuristic run takes "
-                 f"{heuristic.min():.1f} s", fontsize=14)
     fig.tight_layout(rect=(0, 0.06, 1, 1))
     return fig
 
@@ -424,11 +404,6 @@ def plot_qaoa_depth(outcomes: pd.DataFrame) -> plt.Figure:
     handles = [Patch(color=colour, label=label)
                for label, colour in OUTCOME_STYLE.values()]
     framed_legend(fig, handles, ncol=4, y=0.0)
-    top = mean.index.max()
-    fig.suptitle(f"Deeper QAOA raises P(optimal) from {mean.loc[0, 'p_optimal']:.2f} "
-                 f"to {mean.loc[top, 'p_optimal']:.2f}, but the empty plan grows from "
-                 f"{mean.loc[0, 'p_empty']:.2f} to {mean.loc[top, 'p_empty']:.2f}",
-                 fontsize=14)
     fig.tight_layout(rect=(0, 0.07, 1, 1))
     return fig
 
@@ -460,7 +435,7 @@ def plot_transfer_outcomes(outcomes: pd.DataFrame) -> plt.Figure:
             ax.scatter(xi + rng.uniform(-0.16, 0.16, len(values)), values, s=16,
                        color="black", zorder=4)
         ax.set_xticks(x, [label for *_rest, label in bars], fontsize=10)
-        ax.set_title(f"p = {depth}")
+        ax.set_xlabel(f"QAOA depth p = {depth}")
         ax.set_ylim(0, 1)
         style_axes(ax, ygrid=False)
         for xi, (method, reps, _label) in zip(x, bars):
@@ -472,14 +447,6 @@ def plot_transfer_outcomes(outcomes: pd.DataFrame) -> plt.Figure:
     handles.append(Line2D([], [], linestyle="", marker="o", color="black",
                           markersize=5, label="P(optimal), one graph"))
     framed_legend(fig, handles, ncol=5, y=0.0)
-    last = transfer[transfer["reps"] == depths[-1]]
-    standard = last[last["method"].isin(["fixed", "ibm", "gat", "optimized"])]
-    per_method = standard.groupby("method")["p_optimal"].mean()
-    rws_empty = last[last["method"] == "rws"]["p_empty"].mean()
-    fig.suptitle(f"Transferred angles match target training (mean P(optimal) "
-                 f"{per_method.min():.2f}–{per_method.max():.2f} at p = {depths[-1]}); "
-                 f"RWS sends {rws_empty:.0%} of its probability to the empty plan",
-                 fontsize=14)
     fig.tight_layout(rect=(0, 0.07, 1, 1))
     return fig
 
@@ -510,11 +477,6 @@ def plot_mid_qaoa(qaoa_mid: pd.DataFrame) -> plt.Figure:
                 Line2D([], [], linestyle="", marker="s", color=C_REFERENCE,
                        markersize=8, label="trained on the instance")]
     framed_legend(fig, handles, ncol=5, y=0.0)
-    large = qaoa_mid[qaoa_mid["qubits"] > 100]
-    trained_up_to = qaoa_mid.loc[qaoa_mid["angles"] == "train", "qubits"].max()
-    fig.suptitle(f"Within-budget shots fade with size: at most {large['p_feasible'].max():.1%} "
-                 f"above 100 qubits (donor angles; training was run up to "
-                 f"{trained_up_to} qubits)", fontsize=14)
     fig.tight_layout(rect=(0, 0.07, 1, 1))
     return fig
 
@@ -559,7 +521,7 @@ def plot_decomposition(decomposition: pd.DataFrame,
             ax.plot([x - 0.3, x + 0.3], [100 * data["gap"].median()] * 2,
                     color="black", linewidth=2.6)
         ax.set_xticks(range(len(columns)), [label for label, _ in columns])
-        ax.set_title(title)
+        ax.set_xlabel(f"budget-split rule: {title}")
         ax.set_xlim(-0.6, len(columns) - 0.4)
         ax.set_yscale("symlog", linthresh=10)
         ax.set_yticks([0, 10, 100, 1000], ["0", "10", "100", "1000"])
@@ -569,12 +531,5 @@ def plot_decomposition(decomposition: pd.DataFrame,
                       color=C_REFERENCE, markersize=8, label=f) for f in FAMILY_ORDER]
     handles.append(Line2D([], [], color="black", linewidth=2.6, label="median"))
     framed_legend(fig, handles, ncol=4, y=0.0)
-    refined = iterated[iterated["rule"] == "marginal+refine"]
-    medians = iterated[iterated["setting"] == "fit156"].groupby("rule")["gap"].median()
-    best = DECOMPOSITION_RULES[medians.idxmin()].replace("\n", " ")
-    fig.suptitle(f"Four pieces + refinement reach the optimum in "
-                 f"{int((refined['gap'].abs() < 1e-12).sum())}/{len(refined)} cases; "
-                 f"with ≤ 155-qubit pieces the best rule ({best}) leaves a median "
-                 f"{medians.min():.0%} gap", fontsize=14)
     fig.tight_layout(rect=(0, 0.07, 1, 1))
     return fig

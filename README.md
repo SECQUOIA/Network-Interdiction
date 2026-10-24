@@ -341,9 +341,10 @@ one, as in the quantum-preconditioning notebook). Its sections:
    ([results/decomposition_large.csv](results/decomposition_large.csv)).
 
 The figures are drawn by [results_plots.py](results_plots.py) and saved to
-[figures/](figures/); each title states its takeaway, computed from the data
-it plots. [tests/test_analysis_notebook.py](tests/test_analysis_notebook.py)
-runs the notebook and checks every figure against the raw CSVs. QAOA is not
+[figures/](figures/). They carry no titles; the notebook text states each
+takeaway. [tests/test_analysis_notebook.py](tests/test_analysis_notebook.py)
+runs the notebook and checks every figure, and every number the text quotes,
+against the raw CSVs. QAOA is not
 scored by energy there: the budget penalty makes the empty plan a low-energy
 state, so energy scores can rise while the proposed plans get worse.
 
