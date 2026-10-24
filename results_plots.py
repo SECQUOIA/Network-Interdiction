@@ -389,7 +389,7 @@ def plot_qaoa_depth(outcomes: pd.DataFrame) -> plt.Figure:
                   linewidth=2, markersize=7, label=f"{case} ({sub['qubits'].iloc[0]} q)")
     left.set_xticks([0, 1, 2, 3], ["0\n(uniform)", "1", "2", "3"])
     left.set_xlabel("QAOA depth p")
-    left.set_ylabel("P(optimal plan)")
+    left.set_ylabel("Probability of optimal plan")
     left.set_ylim(0, None)
     left.legend(fontsize=9, ncol=2, loc="upper left")
     style_axes(left)
