@@ -69,20 +69,28 @@ def plan_outcomes(problem):
     return labels
 
 
+def plan_probabilities(problem, probabilities):
+    """Marginalize a little-endian state over its interdiction (x) bits."""
+    probabilities = np.asarray(probabilities, dtype=float)
+    if probabilities.shape != (2 ** problem.num_qubits,):
+        raise ValueError(f'expected {2 ** problem.num_qubits} probabilities, '
+                         f'got shape {probabilities.shape}')
+    index = np.arange(probabilities.size, dtype=np.int64)
+    pattern = np.zeros(index.shape, dtype=np.int64)
+    for e, qubit in enumerate(problem.x_qubits):
+        pattern |= ((index >> qubit) & 1) << e
+    return np.bincount(pattern, weights=probabilities,
+                       minlength=2 ** len(problem.x_qubits))
+
+
 def outcome_probabilities(problem, probabilities, labels=None):
     """
     Split a little-endian probability vector over OUTCOMES by its x bits.
     Returns {'p_optimal': ..., 'p_suboptimal': ..., ...}.
     """
-    probabilities = np.asarray(probabilities, dtype=float)
     if labels is None:
         labels = plan_outcomes(problem)
-    index = np.arange(probabilities.size, dtype=np.int64)
-    pattern = np.zeros(index.shape, dtype=np.int64)
-    for e, qubit in enumerate(problem.x_qubits):
-        pattern |= ((index >> qubit) & 1) << e
-    per_plan = np.bincount(pattern, weights=probabilities,
-                           minlength=labels.size)
+    per_plan = plan_probabilities(problem, probabilities)
     shares = np.bincount(labels, weights=per_plan, minlength=len(OUTCOMES))
     return {f'p_{name}': float(share) for name, share in zip(OUTCOMES, shares)}
 

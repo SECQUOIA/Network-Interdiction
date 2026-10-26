@@ -1,0 +1,23 @@
+\begin{table}[tb]
+\centering
+\small
+\caption{Statevector comparison. Each row averages the same six held-out graphs. $P_{\mathrm{opt}}$ uses exact state probabilities; $P_{\mathrm{feas}}$ uses 4096 sampled bit strings. Evaluations count target quantum-angle optimizer calls.}
+\label{tab:transfer}
+\begin{tabular}{llrrrr}
+\toprule
+$p$ & Method & $G_E$ & $P_{\mathrm{opt}}$ & $P_{\mathrm{feas}}$ & Evaluations \\
+\midrule
+1 & Fixed donor & 0.4941 & 0.0689 & 0.2013 & 0.0 \\
+1 & Nearest donor & 0.4947 & 0.0684 & 0.1978 & 0.0 \\
+1 & GAT & 0.4894 & 0.0676 & 0.2092 & 0.0 \\
+1 & Target trained & 0.5004 & 0.0677 & 0.2008 & 31.7 \\
+1 & Warm start & 0.7967 & 0.1428 & 0.8062 & 0.0 \\
+\midrule
+2 & Fixed donor & 0.6528 & 0.1322 & 0.4033 & 0.0 \\
+2 & Nearest donor & 0.6511 & 0.1342 & 0.4003 & 0.0 \\
+2 & GAT & 0.6621 & 0.1283 & 0.4043 & 0.0 \\
+2 & Target trained & 0.6695 & 0.1377 & 0.4062 & 100.5 \\
+2 & Warm start & 0.8610 & 0.1183 & 0.8693 & 0.0 \\
+\bottomrule
+\end{tabular}
+\end{table}

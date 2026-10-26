@@ -1,0 +1,9 @@
+Companion files downloaded, without modification, on 14 October 2026 from:
+https://epubs.siam.org/pb-assets/macros/standard/siamart_251216.zip
+https://epubs.siam.org/pb-assets/macros/standard/docsiamart.tex
+
+The manuscript uses the older, unmodified siamart171218.cls and siamplain.bst
+from the user's neighboring Quantum-Preconditioning-For-Constrained-Optimization-Problems
+Overleaf project. Those two files are in the manuscript root. The current
+complete companion distribution is retained here with its documentation and
+examples. Do not edit the SIAM class or bibliography-style files.

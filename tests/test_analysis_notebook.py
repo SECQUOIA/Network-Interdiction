@@ -25,7 +25,7 @@ QAOA_CSV = os.path.join(RESULTS, 'qaoa_tiny.csv')
 SAMPLE_CSV = os.path.join(RESULTS, 'sample_results_sa.csv')
 SAVED_FIGURES = {'example_instances', 'problem_sizes', 'classical_gaps',
                  'time_vs_gap', 'qaoa_outcomes_depth', 'transfer_outcomes',
-                 'mid_qaoa', 'decomposition'}
+                 'mid_qaoa', 'decomposition', 'qaoa_sample_quality'}
 
 
 def read(name):
@@ -154,6 +154,11 @@ def test_numbers_in_the_text_match_the_data(notebook_text, raw):
     claims.append(f"from {tiny.loc[0, 'p_optimal']:.2f} at the uniform start to "
                   f"{tiny.loc[3, 'p_optimal']:.2f} at p = 3")
     claims.append(f"grows from {tiny.loc[0, 'p_empty']:.2f} to {tiny.loc[3, 'p_empty']:.2f}")
+    quality = read('qaoa_sample_quality.csv')
+    best_ten = (quality[quality['measurements'] == 10]
+                .groupby('reps')['expected_best_gap'].mean())
+    claims.append(f"{best_ten.loc[0]:.0%} (uniform), {best_ten.loc[1]:.0%} (p = 1), "
+                  f"{best_ten.loc[2]:.0%} (p = 2), and {best_ten.loc[3]:.0%} (p = 3)")
     transfer = outcomes[(outcomes['source'] == 'transfer') & (outcomes['reps'] == 2)]
     standard = transfer[transfer['method'].isin(['fixed', 'ibm', 'gat', 'optimized'])]
     per_method = standard.groupby('method')['p_optimal'].mean()
@@ -306,6 +311,31 @@ def test_transfer_bars_are_method_means(namespace):
                      & (transfer['reps'] == (depth if reps is None else reps))]['p_optimal']
             for method, reps in order])
         np.testing.assert_allclose(np.sort(dots), np.sort(expected))
+
+
+def test_sample_quality_lines_are_equal_case_means(namespace):
+    quality = read('qaoa_sample_quality.csv')
+    ax = namespace['fig_sample_quality'].axes[0]
+    assert ax.get_xscale() == 'log'
+    assert 'Expected best gap' in ax.get_ylabel()
+    assert len(ax.containers) == quality['reps'].nunique() == 4
+    for container, (depth, group) in zip(ax.containers, quality.groupby('reps')):
+        line, caps, bars = container.lines
+        assert group.groupby('measurements')['case'].nunique().eq(6).all()
+        means = group.groupby('measurements')['expected_best_gap'].mean()
+        per_case = group.pivot(index='case', columns='measurements',
+                               values='expected_best_gap').to_numpy()
+        sem = np.std(per_case, axis=0, ddof=1) / np.sqrt(len(per_case))
+        np.testing.assert_array_equal(line.get_xdata(), means.index)
+        np.testing.assert_allclose(line.get_ydata(), 100 * means)
+        assert len(caps) == 2
+        segments = np.asarray(bars[0].get_segments())
+        np.testing.assert_allclose(segments[:, :, 0],
+                                   np.repeat(means.index.to_numpy()[:, None], 2, axis=1))
+        np.testing.assert_allclose(segments[:, 0, 1], 100 * (means - sem), atol=1e-12)
+        np.testing.assert_allclose(segments[:, 1, 1], 100 * (means + sem), atol=1e-12)
+        assert container.get_label() == ('Uniform random guessing' if depth == 0
+                                         else f'QAOA p = {depth}')
 
 
 def test_mid_qaoa_points(namespace):

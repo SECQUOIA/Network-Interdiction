@@ -117,6 +117,10 @@ def load_outcomes() -> pd.DataFrame:
     return pd.read_csv(RESULTS / "qaoa_outcomes.csv", comment="#")
 
 
+def load_sample_quality() -> pd.DataFrame:
+    return pd.read_csv(RESULTS / "qaoa_sample_quality.csv", comment="#")
+
+
 def load_qaoa_mid() -> pd.DataFrame:
     df = pd.read_csv(RESULTS / "qaoa_mid.csv", comment="#")
     df["family"] = df["family"].map(_FAMILY_FROM_NAME)
@@ -267,7 +271,7 @@ def plot_problem_sizes(large: pd.DataFrame, mid: pd.DataFrame,
     ax.set_yscale("log")
     ax.set_ylim(None, ordered["qubits"].max() * 1.9)
     ax.set_xlabel("arcs in the network")
-    ax.set_ylabel("QUBO variables = qubits  (V − 2 + 3E)")
+    ax.set_ylabel("QUBO variables = qubits")
     style_axes(ax)
     handles = [Line2D([], [], linestyle="",
                       marker="P" if np.asarray(families)[0] == "tiny" else "o",
@@ -346,8 +350,8 @@ def plot_time_vs_gap(large: pd.DataFrame) -> plt.Figure:
     ax.set_yscale("symlog", linthresh=1)
     ax.set_ylim(-0.5, None)
     ax.set_yticks([0, 1, 10, 100, 1000], ["0", "1", "10", "100", "1000"])
-    ax.set_xlabel("wall time until the answer is found (s, log scale)")
-    ax.set_ylabel("gap to optimum, %  (symlog)")
+    ax.set_xlabel("wall time until the answer is found (s)")
+    ax.set_ylabel("gap to optimum, %")
     style_axes(ax)
     handles = [Line2D([], [], linestyle="", marker=m, color=c, markersize=8, label=l)
                for l, (_col, _t, c, m) in CLASSICAL.items()]
@@ -399,12 +403,36 @@ def plot_qaoa_depth(outcomes: pd.DataFrame) -> plt.Figure:
     right.set_xlim(0, 3)
     right.set_ylim(0, 1)
     right.set_xlabel("QAOA depth p")
-    right.set_ylabel("share of probability (mean of 6 cases)")
+    right.set_ylabel("Probability")
     style_axes(right, ygrid=False)
     handles = [Patch(color=colour, label=label)
                for label, colour in OUTCOME_STYLE.values()]
     framed_legend(fig, handles, ncol=4, y=0.0)
     fig.tight_layout(rect=(0, 0.07, 1, 1))
+    return fig
+
+
+def plot_qaoa_sample_quality(quality: pd.DataFrame) -> plt.Figure:
+    """Mean expected best gap with SEM across cases; one line per tiny depth."""
+    fig, ax = plt.subplots(figsize=(9.2, 5.8))
+    for reps, sub in quality.groupby("reps", sort=True):
+        summary = sub.groupby("measurements")["expected_best_gap"].agg(["mean", "sem"])
+        ax.errorbar(
+            summary.index.to_numpy(), 100 * summary["mean"].to_numpy(),
+            yerr=100 * summary["sem"].to_numpy(), capsize=3, elinewidth=1,
+            color=C_REFERENCE if reps == 0 else QAOA_DEPTH_COLORS[reps],
+            linestyle="--" if reps == 0 else "-", linewidth=2,
+            marker="o", markersize=4,
+            label="Uniform random guessing" if reps == 0 else f"QAOA p = {reps}")
+    ax.set_xscale("log")
+    ax.set_xticks([1, 10, 100, 1000, 4096], ["1", "10", "100", "1,000", "4,096"])
+    ax.set_xlim(1, quality["measurements"].max())
+    ax.set_ylim(0, None)
+    ax.set_xlabel("Number of independent measurements")
+    ax.set_ylabel("Expected best gap to optimum, %")
+    style_axes(ax)
+    ax.legend(loc="upper right")
+    fig.tight_layout()
     return fig
 
 
@@ -441,7 +469,7 @@ def plot_transfer_outcomes(outcomes: pd.DataFrame) -> plt.Figure:
         for xi, (method, reps, _label) in zip(x, bars):
             if reps == 0:
                 ax.axvspan(xi - 0.42, xi + 0.42, color="#F2F2F2", zorder=0)
-    axes[0].set_ylabel("share of probability (mean of 6 graphs)")
+    axes[0].set_ylabel("Probability")
     handles = [Patch(color=colour, label=label)
                for label, colour in OUTCOME_STYLE.values()]
     handles.append(Line2D([], [], linestyle="", marker="o", color="black",
@@ -497,12 +525,8 @@ def plot_decomposition(decomposition: pd.DataFrame,
     iterated = decomposition[(decomposition["mode"] == "iterated")
                              & decomposition["flow"].notna()]
     greedy_gap = large["Greedy"] / large["Opt_NIP"] - 1
-    four = iterated[iterated["setting"] == "pieces4"]["max_piece_qubits"]
-    small = iterated[iterated["setting"] == "fit156"]["pieces"]
-    settings = [("pieces4", f"4 pieces (largest {four.min():,.0f}–"
-                            f"{four.max():,.0f} qubits)"),
-                ("fit156", f"pieces of ≤ 155 qubits ({small.min()}–"
-                           f"{small.max()} pieces)")]
+    settings = [("pieces4", "4 pieces"),
+                ("fit156", "pieces of ≤ 155 qubits")]
     fig, axes = plt.subplots(1, 2, figsize=(14.5, 5.6), sharey=True,
                              gridspec_kw={"width_ratios": [5, 4]})
     rng = np.random.default_rng(0)
@@ -526,7 +550,7 @@ def plot_decomposition(decomposition: pd.DataFrame,
         ax.set_yscale("symlog", linthresh=10)
         ax.set_yticks([0, 10, 100, 1000], ["0", "10", "100", "1000"])
         style_axes(ax)
-    axes[0].set_ylabel("gap to optimum, %  (symlog)")
+    axes[0].set_ylabel("gap to optimum, %")
     handles = [Line2D([], [], linestyle="", marker=FAMILY_MARKERS[f],
                       color=C_REFERENCE, markersize=8, label=f) for f in FAMILY_ORDER]
     handles.append(Line2D([], [], color="black", linewidth=2.6, label="median"))

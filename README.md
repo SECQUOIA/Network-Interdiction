@@ -335,7 +335,11 @@ one, as in the quantum-preconditioning notebook). Its sections:
    where each state's probability goes: optimal plan, within budget, the
    empty plan, or over budget
    ([results/qaoa_outcomes.csv](results/qaoa_outcomes.csv), from
-   [qaoa_outcomes.py](qaoa_outcomes.py));
+   [qaoa_outcomes.py](qaoa_outcomes.py)); a separate figure shows the expected
+   best original-objective gap versus the number of independent measurements,
+   with one line per QAOA depth and a uniform-random baseline
+   ([results/qaoa_sample_quality.csv](results/qaoa_sample_quality.csv), from
+   [qaoa_sample_quality.py](qaoa_sample_quality.py));
 4. MPS QAOA at 39–149 qubits ([results/qaoa_mid.csv](results/qaoa_mid.csv));
 5. decomposition of the large cases into four pieces or 156-qubit pieces
    ([results/decomposition_large.csv](results/decomposition_large.csv)).
@@ -347,6 +351,22 @@ runs the notebook and checks every figure, and every number the text quotes,
 against the raw CSVs. QAOA is not
 scored by energy there: the budget penalty makes the empty plan a low-energy
 state, so energy scores can rise while the proposed plans get worse.
+
+The measurement-count figure uses `f/f* - 1` without repair. Over-budget
+measurements receive the empty plan's gap (`maxflow/f* - 1`); they cannot
+earn a better score by removing extra arcs. Each curve averages the exact
+expected best gap over the same six tiny cases, with equal weight per case.
+Error bars show ±1 SEM across cases (sample standard deviation divided by
+the square root of six), rather than shot noise within a circuit.
+This compares sampling quality, without accounting for training or execution
+time. Regenerate its data from the saved angles (no retraining) with:
+
+```
+python qaoa_sample_quality.py --out results/qaoa_sample_quality.csv
+```
+
+The generator refuses to overwrite an existing file. The notebook itself
+only reads the CSV and does not run a simulator.
 
 ### Regenerating the results CSV
 

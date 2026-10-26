@@ -1,0 +1,2 @@
+{"time": "2026-10-08T09:31:40", "job_id": "db3pmc2mb58s73886ir0", "backend": "ibm_fez", "account": "open", "circuits": 1, "shots": 4096, "qpu_seconds": 3, "purpose": "penalty QAOA on NIP QUBO, trained angles from results/qaoa_tiny.csv: tiny_a_B1_p1 (issue #17)"}
+{"time": "2026-10-08T09:32:23", "job_id": "db3pmmo4qg6s73c15qc0", "backend": "ibm_fez", "account": "open", "circuits": 3, "shots": 4096, "qpu_seconds": 5, "purpose": "penalty QAOA on NIP QUBO, trained angles from results/qaoa_tiny.csv: tiny_a_B1_p2, tiny_a_B1_p3, tiny_d_B1_p1 (issue #17)"}

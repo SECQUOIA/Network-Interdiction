@@ -1,0 +1,10 @@
+% The 2017 SIAM class replaces the kernel's label and refstepcounter macros.
+% Current hyperref/cleveref need the kernel versions to construct references.
+% Restore them before hyperref loads, matching the approach in SIAM's 2025
+% class, without changing the requested 2017 class file or its page layout.
+\let\siamKernelLabel\label
+\let\siamKernelRefstepcounter\refstepcounter
+\AddToHook{package/hyperref/before}{%
+  \let\label\siamKernelLabel
+  \let\refstepcounter\siamKernelRefstepcounter
+}

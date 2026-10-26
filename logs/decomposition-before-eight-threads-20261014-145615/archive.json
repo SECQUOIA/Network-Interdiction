@@ -1,0 +1,7 @@
+{
+  "old_pid": 108041,
+  "command": "/home/rames102/miniconda3/envs/network-interdiction/bin/python -u run_decomposition_benchmark.py --refine --out results/decomposition_benchmark.csv ",
+  "source_commit": "0dd3cde",
+  "reason": "Full rerun with eight Gurobi threads requested by user; old timings are archived, not resumed.",
+  "sha256": "8fd70a52a7d7aaddca71158f3d1df4f1c57e59072aeb406735a58f86e60e661a"
+}

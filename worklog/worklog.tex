@@ -1,0 +1,821 @@
+\documentclass[10.5pt]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\setlist{nosep,leftmargin=1.4em}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+\emergencystretch=3em
+
+% One entry per change, newest first: \entry{date}{title}
+\newcommand{\entry}[2]{\bigskip\noindent{\large\bfseries #2}\hfill{\small\color{black!60}#1}\par\nobreak\vspace{2pt}\hrule\vspace{4pt}}
+% Break the page before a field label rather than leave it alone at the bottom.
+\newcommand{\keeplines}[1]{\par\vskip 0pt plus #1\baselineskip\penalty-250\vskip 0pt plus -#1\baselineskip}
+\newcommand{\field}[1]{\keeplines{3}\textbf{#1}\quad}
+\newcommand{\pr}[1]{\href{https://github.com/anurag-r20/Network-Interdiction/pull/#1}{PR~\##1}}
+\newcommand{\iss}[1]{\href{https://github.com/anurag-r20/Network-Interdiction/issues/#1}{\##1}}
+\newcommand{\f}[1]{\texttt{#1}}
+
+\title{Network Interdiction --- Work Log}
+\author{Maintained by Claude Code and Codex for Anurag Ramesh}
+\date{Last updated: 26 October 2026}
+
+\begin{document}
+\maketitle
+
+\noindent This log records every change to the code, newest first. A new
+entry is added, and this PDF rebuilt, each time a piece of code is changed or
+implemented. Page~1 is always the current state.
+
+\section*{Current state (25 October 2026)}
+
+\begin{tabularx}{\linewidth}{@{}lX@{}}
+\toprule
+\textbf{Pull requests} & \\
+\pr{20}--\pr{24} & Merged: \pr{20} and \pr{21} on 6 October; \pr{22}, \pr{23} and \pr{24} on 15 October (by bernalde). \\
+\pr{25}--\pr{37} & \emph{Open.} All opened by bernalde on 15 October; CI green; no independent review on GitHub. Reviewed locally on 22 October (entry below): none is ready as is. \pr{29}, \pr{33} and \pr{37} need changes; the others need small fixes. Nothing has been posted to GitHub. \\
+Merge order & Two stacks: \pr{25}$\to$\pr{27}$\to$\pr{29}$\to$\pr{36}$\to$\pr{37} and \pr{28}$\to$\pr{30}$\to$\pr{31}$\to$\pr{32}$\to$\pr{35}. \pr{26}, \pr{33} and \pr{34} stand alone. \pr{37} already contains \pr{28} and \pr{30}--\pr{35}, so it must not be merged first. \\
+\midrule
+\textbf{Gurobi} & \emph{Fixed} on 22 October: academic license 2877481 (expires 2027-10-22), bound to the fixed-address adapter \f{eth1}. \\
+\midrule
+\textbf{Results notebook} & \emph{Rebuilt} on 23 October from merged results only, on the local branch \f{notebook/results-v2} (not pushed). On 25 October, added expected best objective gap against measurement count for the tiny QAOA states; existing figures are unchanged. Sections for open PRs are added as each merges. \\
+\midrule
+\textbf{Long runs} & None active. \\
+Decomposition benchmark & The eight-thread run (14 October, 497 rows, all 27 slide cases) is checked and committed on \f{notebook/results-v2} as \f{results/decomposition\_large.csv}. \\
+\midrule
+\textbf{Backlog (only on request)} & \\
+1 & Follow-up fix for the merged \pr{24}: add the empty-cut probability and a warm-start-only baseline, report $P(\mathrm{opt})$ first, and disclose or drop the $\lambda$ feature. \\
+2 & Post the review findings on each open PR (needs your approval). \\
+3 & Cap \f{partition\_to\_fit} when no partition fits. \\
+4 & LP line, led by the user (decided 23 October): take over \pr{25}'s branch, then study why the LP is exact on these instances, where it breaks, and LP-seeded QAOA. \\
+5 & Deferred: implementing arXiv 2610.10772. (Benders, \iss{15}, is now in \pr{27}.) \\
+\midrule
+\textbf{Needs you} & \\
+& Review the rebuilt notebook; then push \f{notebook/results-v2} and open a PR, or ask for changes. \\
+& \pr{26}: confirm the MIT license with Hanjing Xu, who wrote most of the original code. \\
+& Drop the two old stashes (\f{git stash drop}, twice); I was not allowed to. \\
+& Decide whether to commit the IBM hardware results and this log to the repository. \\
+\bottomrule
+\end{tabularx}
+
+% ---------------------------------------------------------------------------
+\section*{Entries}
+
+
+\entry{26 Oct 2026}{Copy the project to SECQUOIA}
+\field{Request}Move the repository to SECQUOIA, or create a new repository
+there and copy the project if a transfer is not possible.
+\field{Change}GitHub rejected the direct transfer with HTTP 422
+(``Repository can't be transferred''). Created the private repository
+\href{https://github.com/SECQUOIA/Network-Interdiction}{SECQUOIA/Network-Interdiction}.
+The copy includes the current notebook, results, paper, V1 presentation
+and worklog on \f{notebook/results-v2}, alongside the source repository's
+existing branches and Git history. The current-work branch is the new
+default; the source main branch is preserved. Local environments, caches
+and ignored build files are excluded.
+\field{Scope}Issues and pull requests remain in
+\href{https://github.com/anurag-r20/Network-Interdiction}{the original repository};
+their historical links in this log still point there. No pull requests
+were merged and no experiments were rerun.
+\field{Verification}Confirmed that the destination is private and that all
+169 project files in the prepared copy match the working checkout byte
+for byte. Preserved tracked file modes and rebuilt this PDF.
+
+
+\entry{26 Oct 2026}{Keep only the V1 presentation}
+\field{Request}Remove all other presentation versions, their corresponding
+PDFs and scripts, keeping the version ending in \f{\_V1}.
+\field{Change}Preserved the author's
+\f{Network\_Interdiction\_Project\_Update\_V1.pptx} unchanged and exported
+its matching three-page PDF with native PowerPoint. Removed superseded
+decks, the old \f{st\_NIP} presentations, PDFs, previews, figure copies,
+archived checkpoints, generation metadata and version-specific scripts.
+The slide README now points only to V1. Font files and their license remain.
+The notebook, source figures, paper and research code are unchanged.
+\field{Verification}Checked the V1 package, confirmed the PDF's page count
+and titles, and verified that the retained PPTX has the same SHA-256 hash
+as before cleanup. V1 is the only remaining project presentation.
+
+
+\entry{26 Oct 2026}{Use the exact notebook plots in a three-slide presentation}
+\field{Request}Replace the separately redrawn slide figures with the same
+plots as the notebook. The user selected three slides when asked about
+readability and the earlier two-slide limit.
+\field{Change}Captured the latest author-edited deck. Slide 1 pairs the
+size and sampling figures; slide 2 shows decomposition; slide 3 shows
+parameter setting strategies at both $p=1$ and $p=2$. Each embedded PNG
+is byte-for-byte identical to its saved notebook figure. No plot is
+redrawn, cropped or relabeled. The latest author titles, wording,
+formatting and removal of the visible MPS sentence are preserved across
+the new layout. The transfer caption and notes clarify which depth its
+66\% statistic describes.
+\field{Files}The current presentation, PDF and previews use suffix
+\f{\_notebook\_plots} in the existing slide directory. The new builder
+copies saved figures directly; its manifest records their hashes. Earlier
+presentations and all notebook files are untouched.
+\field{Verification}Verified all four image payloads against the notebook
+PNGs, checked aspect ratios and zero crop, and checked preservation of
+author text and unrelated package parts. Native PowerPoint exported three
+slides and three PDF pages. All previews were inspected; package,
+template and delivery checks pass, with no native text overflow.
+
+
+\entry{26 Oct 2026}{Add the qubit-size motivation and refresh the presentation plots}
+\field{Request}Include the notebook's problem-size figure as a main reason
+for decomposition, and update the presentation with the cleaned plot labels.
+\field{Change}Started from a new checkpoint of the author's latest saved
+deck, including the title ``Decomposition-Based Refinement''. The first
+slide now places the full-QUBO and fitted-piece sizes beside the two
+decomposition comparisons. It retains all network points, family markers,
+the device and simulation limits, and the no-fit warning. Both QAOA plots
+are refreshed with concise axis labels, and the SEM bars remain.
+The presentation still has two slides. All existing wording, formatting
+and notes are preserved; only figure layout and two result-text positions
+change. Added figure provenance to the first slide's notes.
+\field{Files}The outputs are in \f{slides/network\_interdiction\_update/},
+with suffix \f{\_updated}.
+Earlier author-edited presentations are untouched. The revision builder,
+input hashes, checkpoint and preservation report are stored alongside them.
+\field{Verification}Checked that unrelated OOXML parts and existing text
+remain unchanged. Rendered both slides in native PowerPoint, inspected the
+plots and labels, and ran package, template and PDF-delivery checks.
+No notebook data or experiments changed.
+
+
+\entry{26 Oct 2026}{Concise axis labels throughout the results notebook}
+\field{Request}Apply the axis-label cleanup to all notebook plots, without
+secondary explanations in the labels.
+\field{Change}Removed the QUBO size formula, mean-count parentheticals,
+log/symlog notes and decomposition-size ranges from the axes. Kept the
+primary quantities, units, and the distinction between the two decomposition
+settings. The stacked outcome plots now use ``Probability''.
+Refreshed the five affected saved figures and their embedded notebook PNGs.
+Data, scales, tick labels, legends, error bars and notebook prose are unchanged.
+\field{Verification}Checked that every other notebook field and saved
+figure remains unchanged, preserving the user's edits. Ran the existing
+notebook checks against the source data.
+
+
+\entry{26 Oct 2026}{Shorter y-axis label on the sampling-quality plot}
+\field{Request}Remove the mean/SEM parenthetical from the y-axis title.
+\field{Change}The label is now ``Expected best gap to optimum, \%''.
+The SEM bars, data, legend and notebook explanation are unchanged.
+Refreshed \f{figures/qaoa\_sample\_quality.png} and only that plot's
+embedded PNG in the current notebook, preserving the user's other edits.
+\field{Verification}Checked that all other notebook content and saved
+figures remain unchanged. The existing sample-quality check verifies the
+mean curves and SEM endpoints against the six per-case values.
+
+
+\entry{26 Oct 2026}{Taller decomposition plot, preserving the author's slide edits}
+\field{Request}Explain slide 1's categorical budget-allocation axis and fix
+its overly wide, shallow plot while preserving the user's changes.
+\field{Change}Captured the latest saved presentation; it was not open in
+PowerPoint. Rebuilt only the decomposition image with more vertical space,
+kept its aspect ratio, and moved the two introductory lines upward into
+space beneath the user's shorter title. The revised PPTX and PDF have
+the suffix \f{\_plot\_fixed} in \f{slides/network\_interdiction\_update/}.
+The user's original file is untouched. Titles, removed text, formatting,
+notes and all of slide 2 are preserved. No notebook or result data changed.
+\field{Verification}Package comparison limits changes to slide 1's plot
+image and three shape geometries. All other package parts, including
+slide 2 and notes, are byte-for-byte unchanged. Checked package integrity
+and rendered the revision in native PowerPoint.
+
+
+\entry{25 Oct 2026}{Two-slide SECQUOIA project update}
+\field{Request}Create at most two slides using the SECQUOIA deck, explaining
+the supplied project progress report and the notebook's experimental results.
+\field{Content}Slide 1 covers the interdiction objective, penalty validation,
+partitioning, budget allocation and refinement. It reuses the decomposition
+figure to show the trade-off between small pieces and solution quality,
+alongside the exact and greedy classical references. Slide 2 pairs the
+expected best-of-$N$ gap figure (including SEM) with the depth-two transfer
+outcome panel, and summarizes MPS and the separate IBM Fez pilot.
+The warm-start claim is qualified: lower QUBO energy did not imply better
+interdiction, and much of the probability remained on the empty plan.
+Speaker notes explain the cohorts, metric, invalid-plan handling, simulation
+limits and hardware provenance.
+\field{Files}\f{slides/network\_interdiction\_update/} contains the editable
+presentation, matching PDF, slide previews,
+builder, native PowerPoint export script, plot copies, and a manifest of
+input hashes. The builder uses the neighboring SECQUOIA template v5.19.
+Roboto fonts are embedded in the delivered presentation; the font license
+is included. The original notebook, figures and experimental data are
+unchanged, and no experiments or hardware jobs were run.
+\field{Verification}Native PowerPoint exported exactly two slides and two
+PDF pages. Package integrity, SECQUOIA publication and delivery checks pass.
+Both slide previews were inspected; all 21 native text shapes fit their
+boxes within a one-point tolerance. Delivery and layout reports are saved
+under \f{qa/}. Both PowerPoint files retain speaker notes, and the PDF
+retains figure descriptions; these checks are not an accessibility
+certification.
+
+
+\entry{25 Oct 2026}{SEM bars on the QAOA measurement-count figure}
+\field{Request}Add standard-error bars to the new solution-quality figure.
+\field{Change}Each point now shows its mean $\pm$ one SEM across the six
+cases, using the sample standard deviation ($\mathrm{ddof}=1$) divided by
+$\sqrt{6}$. These bars describe variation across cases, not shot noise.
+The axis label, notebook explanation and README state this definition.
+The saved data and mean curves are unchanged.
+\field{Verification}The notebook test independently computes SEM from the
+six per-case values and checks both endpoints of every plotted error bar.
+All 22 notebook checks pass.
+
+
+\entry{25 Oct 2026}{QAOA solution quality against measurement count}
+\field{Request}Implement the final suggestion in the user's pasted Claude
+conversation: add a figure of the best-of-$N$ objective gap against the
+number of measurements, with one line per QAOA depth and uniform guessing
+as the baseline. Keep the existing outcome figure.
+
+\field{Method}\f{qaoa\_sample\_quality.py} re-simulates the saved tiny-instance
+angles, marginalizes auxiliary bits, and scores each interdiction plan by
+$f/f^*-1$. An over-budget plan receives the empty plan's score,
+$\mathrm{maxflow}/f^*-1$; it cannot earn credit by cutting extra arcs.
+An exact survival-tail calculation gives the expected minimum gap after
+$N$ independent measurements. Each curve averages those expectations over
+the same six cases, with equal weight per case. No angles are retrained,
+and no greedy repair is applied. This measures ideal sampling quality,
+without training time, execution time, or hardware noise.
+
+\field{Data and notebook}\f{results/qaoa\_sample\_quality.csv} has 288 rows:
+six cases, uniform guessing and depths one through three, and twelve
+measurement counts from 1 to 4096. Its header records the working-tree
+commit, framework versions, and hashes of the inputs and scoring code.
+The notebook only reads this CSV. The new figure is
+\f{figures/qaoa\_sample\_quality.png}; README explains its metric and
+regeneration command. The existing outcome plot and every older figure
+are byte-for-byte unchanged. Changes remain local on
+\f{notebook/results-v2}; nothing is pushed.
+
+\field{Findings}At ten measurements, mean expected gap is 49\% for uniform
+guessing, 19\% at $p=1$, 9\% at $p=2$, and 10\% at $p=3$, reproducing
+Claude's scratch calculation. More measurements help; more depth is not
+consistently better. With thousands of measurements the gaps approach
+zero on these tiny cases, concealing their different sample requirements.
+These expectations do not guarantee the result of a particular shot batch.
+
+\field{Verification}All 48 notebook, outcome, and sample-quality tests
+pass. Checks include direct enumeration of measurement sequences,
+independent NetworkX flow calculations, a Qiskit Statevector cross-check,
+coverage and monotonicity of the saved curves, and the plotted means.
+Three in-memory defects---rewarding an illegal cut, ignoring $N$, and
+reversing the x-bit order---each fail the intended test. The notebook
+executes without errors, the new figure was inspected, all eleven input
+and source hashes match, and all 21 existing figure hashes are unchanged.
+
+
+\entry{24 Oct 2026}{QAOA depth axis label spelled out}
+\field{Change}At the user's request, the left panel's y-axis now reads
+``Probability of optimal plan'' instead of ``P(optimal plan)''; nothing else
+changed (commit \f{68b3286}). The notebook executes without errors and
+its 21 tests pass.
+
+
+\entry{23 Oct 2026}{Figure titles removed}
+\field{Request}The user asked for no titles on any of the plots.
+
+\field{Change}No figure has a title or suptitle any more. Panel identifiers
+moved to axis labels (QAOA depth $p$, decomposition setting) or a caption
+under each example network. Each takeaway the titles stated is now a sentence
+under its figure, and a figure-size takeaway was added for the problem-size
+plot. README and the module docstring say so (commit \f{e4f2f61}).
+
+\field{Verification}The notebook executes without errors and 21 tests pass.
+Two are new: one checks that no figure has a title, and one recomputes every
+number the text quotes (19 claims) from the raw CSVs; a wrong number planted
+in the text made it fail.
+
+
+\entry{23 Oct 2026}{Gurobi timed at its first optimal incumbent}
+\field{Request}The user asked whether the time-against-gap figure used
+Gurobi's best-incumbent time from the solver callback, rather than the time
+to prove optimality. It did not: it used \f{Gurobi\_time\_sec}, the end of
+the solve.
+
+\field{Change}Gurobi is now placed where its MIPSOL callback first reported
+the optimal incumbent (\f{Gurobi\_trajectory}). That matches the heuristics,
+which are timed until their answer is ready. Across all 27 cases the best
+incumbent is the optimum, found at 0.0085--0.048~s; the proof follows within
+0.7~ms, so the points barely move. The title, the axis label and the notebook
+text say what the times mean (commit \f{68223eb}).
+
+\field{Verification}The notebook executes without errors and its 19 tests
+pass. The test recomputes the incumbent times from the trajectory JSON; with
+the proof time planted back, it fails.
+
+
+\entry{23 Oct 2026}{Notebook reloads its figure code}
+\field{Problem}The user still saw the unlabelled figure. The notebook on disk
+was correct, but Run All in a kernel that had already imported
+\f{results\_plots} reuses the old module, so figure edits did not show
+without a kernel restart.
+
+\field{Change}The setup cell reloads \f{utils} and \f{results\_plots}, as
+the earlier notebook did for \f{utils} (commit \f{f28028d}). The notebook
+executes without errors, and its 19 tests pass.
+
+
+\entry{23 Oct 2026}{Large networks labelled in the problem-size figure}
+\field{Request}After the problem-size figure was explained, the user asked
+for each large network to be labelled. Three of them (planar 125, ER 90 and
+k-NN 100) nearly coincide, and the 50-node ones cluster.
+
+\field{Change}The nine names now sit in a column to the left of the group, in
+the same top-to-bottom order as the points, each with a leader line. The
+planar 125 label carries the ``no split fits 155 qubits'' note. Commit
+\f{9fbdadf} on \f{notebook/results-v2}.
+
+\field{Verification}The notebook executes without errors. 19 notebook tests
+pass, including a new check that each network is named once, at its own
+point.
+
+
+\entry{23 Oct 2026}{Notebook names the instances that were run}
+\field{Request}The user asked the notebook not to refer to slides or slide
+instances, and to say which instances were actually run.
+
+\field{Change}The notebook opens with a table of the four instance sets it
+uses: tiny (4 networks, 6 cases), the transfer cohort (6 graphs), mid-size
+(9 networks, 23 cases) and large. The large set is the nine networks of
+\f{testcases/}: planar with 50, 75 and 125 nodes, Erd\H{o}s--R\'enyi with 50,
+70 and 90, and k-NN with 50, 75 and 100, with 288--766 arcs and budgets 4--12
+(27 cases). That name replaces ``slide'' in the text, the figure titles and
+legends, and the code (\f{load\_large}). \f{results/decomposition\_slide.csv}
+became \f{results/decomposition\_large.csv}, with its data bytes unchanged
+(commit \f{76df400}).
+
+\field{Verification}The notebook executes without errors and contains no
+mention of slides. The 34 notebook, outcome and decomposition tests pass. The
+two retitled figures were inspected.
+
+
+\entry{23 Oct 2026}{Results notebook rebuilt from merged results}
+\field{Request}The user found the notebook's plots unhelpful and asked for a
+proper results notebook, built first from merged PRs only, with each open PR
+added after it merges.
+
+\field{Branch}Local branch \f{notebook/results-v2} from \f{main}, not pushed.
+\f{47e1e63} keeps the uncommitted 14 October notebook work unchanged as the
+starting point. \f{b012a4e} adds \f{qaoa\_outcomes.py}, \f{6286beb} its
+results, \f{adc49c4} the decomposition results, and \f{9478133} the notebook,
+\f{results\_plots.py}, tests, README and figures.
+
+\field{New data}\f{results/qaoa\_outcomes.csv} (96 rows) re-simulates every
+stored QAOA state exactly and splits it over interdiction plans: optimal,
+within budget, empty, or over budget. All 84 stored P(optimal) values
+reproduce within $10^{-6}$; it was generated from a clean checkout.
+\f{results/decomposition\_slide.csv} is the finished 14 October eight-thread
+run (497 rows). Its data bytes are unchanged, and it is checked against the
+slide optima, greedy values and max flows.
+
+\field{Notebook}Eight figures, each with a title computed from its data:
+example networks with their optimal cuts; QUBO size against simulator and
+device limits; a heat map of heuristic gaps; time against gap; QAOA's
+outcome split by depth; the parameter-transfer outcome split; within-budget
+and optimal MPS shots; and decomposition gaps by budget rule. The notebook
+runs in about 15~s and calls no solver. New figure names avoid overwriting
+the older figures, which stay in \f{figures/} unused.
+
+\field{Findings}Gurobi proves all 27 slide optima within 0.05~s. Greedy is
+optimal on 19 of 27; SA + repair never beats greedy. On the tiny instances,
+QAOA's P(optimal) rises from 0.06 to 0.22 by $p=3$, but the empty plan
+grows from 0.02 to 0.38, so energy scores mislead. On the held-out cohort,
+the transfer methods match target training, and RWS puts 66\% of its
+probability on the empty plan at $p=2$. Above 100 qubits, at most 0.4\% of
+MPS shots stay within budget. Four pieces with refinement reach the optimum
+in 21 of 27 cases; 155-qubit pieces leave a median 22\% gap even with the
+best rule (min-cut).
+
+\field{Verification}Notebook tests: 19 pass, checking every figure against
+the raw CSVs; four planted bugs in the figure code were each caught. Outcome
+tests: 8 pass, and two planted bugs were caught. Decomposition tests: 7
+pass. Full suite with the real license: 264 passed, 9 skipped (optional
+torch and \f{qaoa\_training\_pipeline}).
+
+
+\entry{22 Oct 2026}{Independent review of \pr{24}--\pr{37}}
+\field{Request}The user asked not to trust the PRs and to review each one
+carefully. No repository code was changed.
+
+\field{Method}Nine read-only reviews, each in its own temporary worktree
+(all removed afterwards). Each read the PR's diff against its own base,
+checked its claims against the linked issue, re-ran its tests and the full
+suite with Gurobi's trial license, recomputed committed numbers, and planted
+bugs to check that the tests catch them. Nothing was posted or changed on
+GitHub. The main checkout was not modified: one stray command in it was
+checked and changed nothing.
+
+\field{Verdicts}\par
+\begin{tabularx}{\linewidth}{@{}llX@{}}
+\toprule
+PR & Verdict & Main problem \\
+\midrule
+\pr{24} (merged) & follow-up fix & Misleading RWS score; transfer no better than one fixed angle set; the $\lambda$ feature uses the exact solution \\
+\pr{25} & small fixes & The Lagrangian pass has no time limit \\
+\pr{26} & small fixes & Needs the consent of Hanjing Xu, author of most original code \\
+\pr{27} & small fixes & Stopping test untested; ignores the thread flag; unconverged runs plotted as converged \\
+\pr{28} & small fixes & D-Wave occurrence counts are always 1 after descent \\
+\pr{29} & needs changes & The shared price is never applied to the piece solves \\
+\pr{30} & small fixes & \f{QCI\_API\_URL} is required, not optional; failures lose finished rows \\
+\pr{31} & small fixes & QAOA numbers depend on the machine; one large case aborts the batch \\
+\pr{32} & small fixes & No guard against QPU spend; the 300~s timeout loses paid results \\
+\pr{33} & needs changes & Large-case embeddings depend on machine speed; 884~KB of regenerable data \\
+\pr{34} & small fixes & The Lean proves the arithmetic steps only; docs claim the whole bound \\
+\pr{35} & small fixes & XY is no better than a random size-$B$ cut; the table omits that baseline \\
+\pr{36} & small fixes & ``Interior'' arcs are not interior; the one hard case is formulation-dependent; data licenses \\
+\pr{37} & needs changes & Contains seven other PRs; SA understated; the large QAOA run was never trained \\
+\bottomrule
+\end{tabularx}
+
+\field{Main finding}The current instances are easy for classical methods.
+The LP relaxation equals the optimum on 49 of the 50 slide and mid cases,
+and LP rounding plus repair is optimal on all 50 in about 0.02~s each.
+\pr{36}'s one ``hard'' case is solved in 0.1~s by a simple exact search
+and in about 3.5~s by the standard MILP. The ``hard for Gurobi'' goal of
+\iss{1} is not met yet.
+
+\field{Correction}The RWS warm-start score reported for \pr{24} (gap
+closed 0.80 and 0.86) mostly reflects probability on the empty cut. That
+cut leaves the full flow, the worst answer, yet scores about 0.98. On
+$P(\mathrm{opt})$, RWS is worse than standard QAOA at $p=2$ (0.118 against
+0.138). GAT and IBM transfer were no better than one fixed angle set.
+
+\field{Tests}Every PR's full suite passes with zero failures. The
+remaining skips need optional packages (torch, IBM, QCI) or, at the time,
+the full Gurobi license.
+
+\field{Side effects}The \pr{34} review installed the Lean 4.35 toolchain
+in \f{\textasciitilde/.elan} and filled the mathlib cache.
+
+
+\entry{22 Oct 2026}{Gurobi license fixed permanently}
+\field{Cause}On WSL2, Gurobi's host ID is the last four bytes of
+\f{eth0}'s hardware (MAC) address, and WSL2 gives \f{eth0} a new random
+address at every start. Each key therefore stopped working after the next
+restart (HostID mismatch on 16 and 20 October).
+
+\field{Fix}Following Gurobi's WSL2 recipe, a boot service
+(\f{gurobi-fixed-adapter.service}, set up by the user with \f{sudo}) creates
+an unused adapter \f{eth1} with the fixed address \f{02:00:47:52:42:01}.
+On the first attempt, udev's default address policy overwrote that
+address; the rule \path{/etc/systemd/network/10-gurobi-eth1.link} now
+prevents this, and the script waits for udev before setting the address.
+The adapter has no IP address and does not affect networking.
+
+\field{License}Installed Gurobi's license tools 13.0.3 in
+\f{\textasciitilde/.local/bin}. Activated the new key against \f{eth1}
+(host ID \f{47524201}): license 2877481, academic, expires 2027-10-22. The
+old file is kept as \f{\textasciitilde/gurobi.lic.bak-20261022}.
+
+\field{Verification}A 3000-variable model, above the trial license's
+2000-variable limit, solves. The two tests that need a full license,
+\f{test\_lambda\_window} and \f{test\_slide\_results}, now run and pass
+(28 passed). Survival across a WSL restart was not tested, at the user's
+choice. If the license breaks again, check \f{ip -o link show eth1}; if
+the address differs, restart the service. No repository code changed.
+
+
+\entry{15 Oct 2026}{\pr{22}--\pr{24} merged; thirteen new PRs (recorded 22 Oct)}
+\field{Merges}bernalde merged \pr{22}, \pr{23} and \pr{24} into \f{main}
+on 15 October (head \f{56e66d6}). \pr{24} had no independent approving
+review; it was reviewed afterwards (entry above).
+
+\field{New PRs}bernalde opened \pr{25}--\pr{37} the same day. They cover
+LP, Lagrangian and Benders baselines (\iss{15}), the shared budget price
+(\iss{14}), real networks (\iss{1}), QCI, Qiskit and IBM backends
+(\iss{17}), embedding cost (\iss{4}), penalty bounds with Lean (\iss{2}),
+the XY mixer (\iss{3}), raw annealer feasibility (\iss{18}) and the license
+(\iss{9}).
+
+\field{Decomposition}The eight-thread decomposition run started on
+14 October finished at 21:33 that day: 497 rows covering all 27 slide
+cases. It has not been verified or committed.
+
+
+\entry{14 Oct 2026}{Notebook metrics aligned with quantum preconditioning}
+\field{Scope}The user requested a simpler notebook using the same metrics
+and plots as the quantum-preconditioning repository. Further experiments
+and implementation work require a new user request.
+
+\field{Definitions}Read \f{Gurobi\_QP/notebooks/analysis.ipynb} and its
+\f{qp\_gurobi/utils.py}. The notebook now measures the original feasible
+interdiction objective, surviving maximum flow $f$, against its exact
+optimum $f^*$. It uses $f/f^*-1$ and
+$100[1-(f-f^*)/|f^*|]$, matching the reference notebook's executable
+definitions. Zero optima are excluded. These are distinct from the earlier
+energy scores and normalized flow-reduction plots.
+
+\field{Plots}Reduced the main notebook to three figures: the five-method
+objective gap at depths one and two after repair, the classical performance
+distribution, and the recorded incumbent trajectory. All saved small
+transfer results tie at the optimum after repair. Timing/PAR and scaling
+comparisons that need missing trajectories are not reconstructed from final
+scores. Existing diagnostic helper regressions remain covered separately.
+This change reads saved data and does not run experiments.
+
+\field{Verification}All ten notebook and metric checks pass. They retain
+the earlier helper regressions and check the new objective formulas,
+missing/zero references, independence from Hamiltonian scores, plotted
+trajectory values, and every suboptimal performance point. The notebook
+was executed from saved CSVs and its three rendered figures inspected.
+
+
+\entry{14 Oct 2026}{Depth-one and depth-two comparison for presentation}
+\field{Request}Added a side-by-side comparison of all five QAOA methods at
+$p=1$ and $p=2$, using the same six held-out graphs and the saved 60-row
+statevector experiment. Depths occupy columns; energy gap closed and
+optimal-interdiction probability occupy rows. Axis scales match across
+depths, graph colors match across panels, and black diamonds mark means.
+
+\field{Artifacts}Updated \f{paper/make\_results.py} to produce a standalone
+depth-one figure and a 16:9 comparison in PNG, PDF, and SVG formats under
+\f{paper/figures/}, named \f{transfer\_depth\_comparison.*}. The comparison PNG uses
+300 dpi. The manuscript retains its depth-two figure. No experiment was
+rerun, and no saved measurements were changed.
+
+
+\entry{14 Oct 2026}{Eight-thread Gurobi policy and full benchmark restart}
+\field{Request}The user requested eight threads for every Gurobi run and
+then explicitly requested a complete restart for fair timing comparisons.
+Stopped the previous decomposition process (PID 108041). Its 153 rows
+covering 16 case/setting groups, log, command and checksum are archived in
+\path{logs/decomposition-before-eight-threads-20261014-145615/}.
+No old timing row will be resumed or combined with the fresh run.
+
+\field{Configuration}A shared model factory explicitly sets
+\f{Threads=8} for exact NIP references, penalty checks, Lagrangian solves,
+restricted piece models, and the trajectory solver. The benchmark CLI now
+defaults to eight instead of one. Its existing explicit override applies
+to the dedicated trajectory solve; reference models remain at eight.
+The decomposition CSV records its thread budget, refuses to overwrite an
+existing output, and logs partition/contraction versus piece-solve phases.
+The notebook identifies its historical one-thread timing data separately.
+
+\field{Restart}The fresh run starts at the first of all 27 cases, with both
+partition settings and budget refinement. It runs from the clean checkout
+\f{/tmp/ni-decomp-eight}, source \f{1ce5438}, as PID 169748, starting at
+15:01 EDT. Output, log, and launch metadata are in
+\f{logs/decomposition-eight-threads-20261014-150145/}.
+Verified \f{Threads=8} on a constructed model before launch; the CSV records
+that setting and the source hash. The first two cases produced 20 new rows.
+No partial row from the prior run was resumed. The observed initial process
+CPU usage exceeded two cores during the piece-solve phase.
+
+\field{CPU interpretation}The previous decomposition models used Gurobi's
+automatic thread setting. Observed one-core CPU use was not a confirmed
+one-thread Gurobi limit. NetworkX partitioning, exact terminal contraction,
+and max-flow calculations remain serial; eight Gurobi threads do not
+parallelize those stages.
+
+\field{Verification}The new runtime tests inspect each real model at
+\f{optimize()}, including the CLI and nested reference solves. All seven
+new checks pass. A scratch mutation forcing one thread fails all six
+solver-path checks, while the overwrite-protection test still passes.
+All 59 relevant solver, trajectory, decomposition, and penalty-window tests pass. Both \pr{23} CI jobs pass; all \pr{24} checks also pass, including both workflow runs triggered by the base/head updates. Posted and read back the restart summary on \pr{23}. The paper's decomposition protocol now records the eight-thread setting.
+
+
+\entry{14 Oct 2026}{SIAM manuscript and rendered PDF; transfer results complete}
+\field{Paper}Drafted \f{paper/Main.tex} with Anurag Ramesh and David E. Bernal
+Neira as the user-confirmed authors. It uses the neighboring quantum
+preconditioning project's unchanged SIAM 2017 class and bibliography style.
+A separate compatibility file restores standard LaTeX reference hooks for
+current hyperref/cleveref. The rendered PDF and Overleaf ZIP are complete; the PDF has eleven pages, with
+penalty and contraction proofs, implementation-specific methods, two
+result tables, a two-panel figure, limitations, and primary references.
+The writing follows the requested approximate ASD-STE100 style while
+retaining mathematical terminology. The PDF is a working draft. Verified the rendered title, proofs, tables, figure and references; there are no unresolved references or overflowing text. The Overleaf archive also compiles independently after extraction.
+
+\field{Data}The transfer experiment finished all 60 rows from clean source
+\f{ac571aa}: 12 training graphs, six held-out graphs, depths one and two,
+five methods. Its largest statevector has 21 qubits ($2^{21}$ complex
+amplitudes, 32 MiB at double precision before simulator overhead).
+All 28 transfer and saved-artifact checks pass, including recreated
+energies, donor choices and a saved GAT on a contracted piece. Four
+artifact mutation probes (missing row, wrong energy gap, wrong energy,
+and zeroed GAT weights) each fail the intended checks; the untouched
+scratch baseline passes all seven artifact tests.
+
+\field{Results}At depth two, mean gap closure is 0.6528 (fixed), 0.6511
+(IBM), 0.6621 (GAT), 0.6695 (target-trained), and 0.8610 (warm start).
+Warm-start optimal-interdiction probability is lower than target-trained
+QAOA (0.1183 versus 0.1377). All repaired outputs are optimal; greedy is
+exact because the cohort uses budget one. These results do not demonstrate
+an advantage on hard interdiction. The paper uses the common ten-instance
+subset for the MPS train/donor comparison, avoiding mismatched cohorts.
+
+\field{GitHub}Committed the raw CSV/JSON/checkpoints, seven artifact tests,
+CI command, and result interpretation as \f{d5152ef}; pushed it and the
+penalty precision fix \f{da352f5} to \pr{24}. Original CSV line endings are
+preserved; the whitespace check passes with CRLF recognized. Checked four
+implemented \iss{16} tasks and verified the read-back. The first task
+(``land'' QAOA) stays open until \pr{22} merges. All three CI jobs pass at this head. Posted and verified the result summary, then marked \pr{24} ready and read back its state. No PR was merged.
+
+\field{Pending}The original classical decomposition process remains active.
+The paper describes its protocol and labels the performance results as
+pending; no partial decomposition CSV is used in the manuscript. Worklog,
+slides, hardware logs, and the new paper remain local, outside the transfer
+PR. The manuscript still needs the full decomposition comparison, harder
+instances, multiple seeds, a product-state-only ablation, MPS convergence,
+and complete runtime accounting before submission.
+
+\entry{14 Oct 2026}{Transfer PR opened; decomposition result checks prepared}
+\field{State}\pr{24} is open on top of \pr{23}. GitHub's core, QAOA and
+transfer jobs all passed at \f{ac571aa}. The 12-training/6-test experiment
+at depths 1 and 2 is running from \f{/tmp/ni-transfer-benchmark}, with
+outputs in \f{/tmp/ni-transfer-output} and log
+\f{/tmp/ni-transfer-benchmark.log}. Its provenance records a clean commit.
+
+\field{Decomposition}The original benchmark is still running. Its first
+133 rows cover 14 of 54 case/setting combinations (the 50- and 75-node
+planar cases). A separate \pr{23} checkout at \f{/tmp/ni-finish-pr23}
+holds draft result checks for complete case coverage, ratios, budgets,
+qubit limits and monotonic refinement. A copy of the partial table fails
+the coverage check, as intended; it is not committed. The active run is
+untouched. A new status comment on \pr{23} records the verified handoff.
+
+\field{Result checks}Prepared transfer-table checks for all 60 expected
+rows, disjoint graph splits, donor-angle provenance, zero target optimizer
+evaluations for transferred schedules, independently enumerated optimal
+flows, energy gaps, and reproduction of a held-out energy for each method.
+The comparison uses budget one, where greedy is exact; interpretation is
+limited to raw quantum energy/probability scores, not a claim of improved
+repaired interdictions.
+
+\field{Reference correction}The restricted Gurobi curve now removes MIP
+tolerance noise for integer capacities before comparing penalty-window
+endpoints, while retaining fractional objectives for fractional-capacity
+callers. Added an integer/fractional reference comparison against exhaustive
+enumeration; all 21 transfer tests pass. Committed as \f{da352f5}.
+Prepared saved-model checks to reproduce the reported donor choice on each
+held-out graph. The saved GAT passed a real contracted-piece solve (flow 5 on
+\f{tiny\_a}, with only owned arcs cut).
+
+\entry{14 Oct 2026}{Parameter-transfer implementation and verified issue checklists}
+\field{What}Checked nine completed tasks across \iss{2}, \iss{4}, \iss{14},
+\iss{15}, and \iss{18}, with each updated issue read back from GitHub.
+The ``every infeasible assignment is worse than every feasible one'' task
+and the closed-form pipeline task remain unchecked: the exact two-sided
+$\lambda$ window does not establish those stronger claims.
+
+\field{Implementation}Added flow-network features (capacities, direction,
+source/sink, budget, penalty, fixed-arc ownership), the actual IBM
+\f{TransferTrainer} adapter, a three-layer GATv2 donor classifier adapted
+from the MIS code, and regularized warm starts with a matching tilted mixer.
+QAOA now supports restricted interdiction sets for contracted pieces.
+Committed as \f{ac571aa}, with optional dependencies and a dedicated
+transfer CI job. A clean detached checkout runs the result generation.
+
+\field{Experiment}Added \f{run\_parameter\_transfer.py}: graph-level
+training/test separation, fixed-donor, IBM, GAT, per-instance COBYLA and
+RWS comparisons; CSV metrics, graph/angle provenance and JSON model
+checkpoints. A four-training/two-test, depth-one smoke run completed.
+The full comparison will run from a clean committed checkout.
+
+\field{Tests}Before editing code, the current full suite ran with both QAOA
+backends required: 181 passed, 17 skipped in 155 seconds. Licensed tests
+skipped in the sandbox. New integrations use an isolated temporary Python
+environment, preserving the environment of the active benchmark.
+The initial 17 transfer tests pass. In a separate scratch copy, six
+deliberate defects were each caught: unrestricted repair, wrong mixer
+sign, wrong regularizer sign, missing budget feature, farthest-donor
+selection, and discarded GAT edge features. The working tree was not
+mutated. The full licensed suite passed all 214 tests in 217 seconds;
+the final transfer module passed 20 tests in 12 seconds, including the
+restricted Gurobi reference and saved-bank reload. The regular environment
+without optional transfer dependencies passed 11 tests and skipped five.
+
+\field{Sources}Verified MIS commit \f{ab8434f}; retained its Apache license.
+The current IBM commit \f{4bad7bc} uses \f{provide\_params} with depth set
+at construction, unlike the older local clone. The dependency is pinned.
+Regularized warm starts follow equations (9) and (18) of arXiv:2603.10191,
+adapted to this repository's normalized minimization Hamiltonian.
+
+\entry{14 Oct 2026}{Handoff: benchmark fix and mid-size results are pushed}
+\field{What}Claude committed \f{0dd3cde}: \f{run\_decomposition\_benchmark.py}
+now writes a ``no fit'' row and carries on when a partition cannot meet the
+qubit limit; \f{-{}-fit-qubits} sets that limit. Commit \f{bc19e01} adds
+\f{results/qaoa\_mid.csv}: 69 donor-angle rows and 30 directly trained rows.
+The local branch and GitHub \pr{23} both point to that commit.
+
+\field{Tests}The handoff records two passing benchmark tests and four
+passing result-consistency tests, with four deliberate CSV corruptions
+caught and the original bytes restored. Codex is verifying current checks
+and the remaining results before completing the PR.
+
+\field{State}The restarted decomposition run is active in its existing
+detached worktree at \f{0dd3cde}; it is being preserved. The issue-body
+edits were prepared but never posted. Only verified completed tasks will
+be checked: exact-window computation replaces bisection but still needs
+exact solves, so it does not complete the request for instance-only
+closed-form bounds. This work log remains local, as before.
+
+% ---------------------------------------------------------------------------
+\entry{10 Oct 2026}{Work log started}
+\field{What}This document: \f{worklog/worklog.tex}, built into \f{worklog/worklog.pdf} with \f{pdflatex}. Not committed to git.
+
+% ---------------------------------------------------------------------------
+\entry{8 Oct 2026}{\pr{23} (draft): mid-size instances, MPS QAOA, better decomposition}
+\field{Why}There were no instances between \f{tiny\_c} (22 qubits) and \f{50.planarflow} (912), so nothing beyond the tiny ones could run on a simulator or on a 156-qubit IBM chip.
+
+\field{What}
+\begin{itemize}
+\item \f{instances.py}: nine seeded networks in \f{testcases/mid/} (planar, Erd\H{o}s--R\'enyi, k-NN), 39--149 qubits. Their exact optima for 23 instance--budget rows are in \f{results/mid\_instances.csv}. Source and sink: the pair with the most arc-disjoint paths.
+\item QAOA past 24 qubits: matrix-product-state (MPS) simulation (\f{qaoa\_qiskit.py -{}-method mps -{}-bond-dimension}), a qubit reordering that keeps couplings short (reverse Cuthill--McKee), exact references from Gurobi, scoring from shots, and a new score \f{gap\_closed} (0 = random guessing, 1 = best state). \f{run\_qaoa\_mid.py} runs all 23 rows.
+\item Decomposition (\f{decomposition.py}): a \f{marginal} budget split (solve each piece first, give cuts where they save most), \f{iterated} solving, \f{refine\_split()}, \f{partition\_to\_fit()} (fewest pieces that fit a qubit limit), an exact Gurobi solver per piece. \f{run\_decomposition\_benchmark.py} compares every rule with Gurobi's optimum.
+\end{itemize}
+
+\field{Tests}193 pass locally; CI green (QAOA job 41 passed; main job 166 passed, 27 skipped). 16 deliberately reintroduced bugs were all caught.
+
+\field{Results so far}
+\begin{itemize}
+\item \textbf{Mid-size instances are easy classically.} Greedy is optimal on all 23 rows, and on 22 the optimal cut touches the source or sink.
+\item \textbf{MPS speed.} The reordering is essential: one 78-qubit evaluation had not finished in 10 minutes without it; with it, 40 qubits take 0.1\,s. At 116 qubits one evaluation takes 15\,s (bond cap 32) or 92\,s (cap 64).
+\item \textbf{QAOA at 39--149 qubits} (angles trained on \f{tiny\_a}, reused unchanged):
+\begin{center}\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+depth & energy gap closed (median, range) & shots within budget (median) & optimum after repair \\
+\midrule
+p = 1 & 0.40 (0.33--0.49) & 0.000 & 18 / 23 rows \\
+p = 2 & 0.54 (0.47--0.67) & 0.004 & 18 / 23 rows \\
+p = 3 & 0.63 (0.56--0.79) & 0.053 & 18 / 23 rows \\
+\bottomrule
+\end{tabular}
+\end{center}
+Training the angles directly on the 30 rows where that was affordable (up to 81 qubits) closes only 0.031 more of the gap (median; range 0.006--0.368). So transferring angles costs little. The catch: almost no raw shot respects the budget (the linear $\lambda$ penalty, \iss{2}); the optimum appears only after greedy repair.
+\item \textbf{Decomposition, partial} (each piece solved exactly):
+\begin{center}\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+instance & pieces & budgets & best variant optimal & marginal, iterated optimal \\
+\midrule
+\f{50.planarflow} & 4 & 4 & 4 & 2 \\
+\f{75.planarflow} & 4 & 3 & 3 & 3 \\
+\f{125.planarflow} & 4 & 2 & 2 & 2 \\
+\f{50.planarflow} & 8 (fits 156 qubits) & 4 & 3 & 2 \\
+\f{75.planarflow} & 30 (fits 156 qubits) & 3 & 2 & 2 \\
+\bottomrule
+\end{tabular}
+\end{center}
+Earlier spot checks on k-NN and Erd\H{o}s--R\'enyi instances were mixed: refinement found the optimum on \f{75\_6.2dnnflow} (145) where greedy does not (165), but the \f{marginal} split was much worse than \f{mincut} on \f{70\_0.1.erdosflow} (100 vs 37; optimum 32).
+\end{itemize}
+
+\field{Open}Benchmark crash on \f{125.planarflow} (see Current state); result files not yet committed.
+
+% ---------------------------------------------------------------------------
+\entry{8 Oct 2026}{IBM Quantum hardware run on \f{ibm\_fez}}
+\field{What}Verified access (Open Plan, account \f{open}). Ran the trained QAOA circuits on the real device, 4096 shots each. Cost 8\,s of QPU time (jobs \f{db3pmc2mb58s73886ir0}, 3\,s; \f{db3pmmo4qg6s73c15qc0}, 5\,s), logged in \f{logs/ibm\_jobs.jsonl}. Nothing committed.
+
+\begin{center}\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+circuit & 2q gates & P(optimal): hw / ideal & random & approx.\ ratio: hw / ideal \\
+\midrule
+\f{tiny\_a} B=1, p=1 (14 q) & 41 & 0.257 / 0.260 & 0.125 & 0.789 / 0.807 \\
+\f{tiny\_a} B=1, p=2 & 70 & 0.311 / 0.333 & 0.125 & 0.869 / 0.894 \\
+\f{tiny\_a} B=1, p=3 & 108 & 0.355 / 0.322 & 0.125 & 0.896 / 0.930 \\
+\f{tiny\_d} B=1, p=1 (21 q) & 66 & 0.091 / 0.101 & 0.031 & 0.778 / 0.799 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\field{Finding}Finding the optimal cut survives the noise (2--3$\times$ random guessing, close to ideal); the energy degrades a little with depth.
+
+% ---------------------------------------------------------------------------
+\entry{7--8 Oct 2026}{CUDA-Q at 21--22 qubits}
+\field{What}Re-ran the whole QAOA sweep in CUDA-Q (CPU simulator \f{qpp-cpu}) to check it against Qiskit at the largest tiny sizes, plus a cross-check of CUDA-Q at Qiskit's trained angles.
+
+\field{Results}Cross-check: all 18 rows agree to $5.4\times10^{-7}$. Independent training: p = 1 and p = 2 land within $10^{-4}$ of Qiskit's angles, with identical approximation ratios. p = 3 was cancelled at 3 of 6 cases (all matching). CUDA-Q on CPU is about 80$\times$ slower than Aer (17\,s vs 0.2\,s per evaluation at 21 qubits); its fast simulators need a GPU.
+
+% ---------------------------------------------------------------------------
+\entry{7 Oct 2026}{QAOA results and notebook section (\pr{22})}
+\field{What}\f{run\_qaoa\_benchmark.py} runs depths 1--3 on the six tiny rows and writes \f{results/qaoa\_tiny.csv}; a new QAOA section in \f{notebooks/analysis.ipynb} with two figures. Also scored the angles trained on \f{tiny\_a}, reused unchanged on the other rows (the transfer baseline).
+
+\field{Results}Approximation ratio 0.80--0.82 at p = 1, 0.92--0.93 at p = 3. P(optimal) relative to random: 6.1--8.5 at p = 3 on the larger B = 1 rows, but only 1.6--2.1 on the B = 2 rows at every depth. Transferred angles lose at most 0.0023 in approximation ratio.
+
+% ---------------------------------------------------------------------------
+\entry{6--7 Oct 2026}{\pr{22}: penalty QAOA in Qiskit and CUDA-Q}
+\field{What}\f{qaoa\_common.py} (shared Hamiltonian, scoring, training), \f{qaoa\_qiskit.py} (Aer), \f{qaoa\_cudaq.py} (CUDA-Q kernel), \f{requirements-qaoa.txt}, a separate CI job. Both backends are tested against an independent numpy simulation; 17 reintroduced bugs were all caught.
+
+\field{Results}On \f{tiny\_a} B=1, p = 2: P(optimal) 0.333 vs 0.125 for random guessing; both backends train to the same angles. At B = 2, lower energy does not mean better cuts.
+
+% ---------------------------------------------------------------------------
+\entry{6 Oct 2026}{Research: GAT and TransferTrainer (no code)}
+\field{Findings}IBM's \f{TransferTrainer} is a lookup (features $\to$ stored angles), not a learned model; it can serve NIP with an NIP feature set, a nearest-match rule and no angle averaging. The MIS GAT work classifies a graph into a cluster of donor graphs, then tries the nearest donors' angles; it handles only unweighted graphs at p = 2. Neither is implemented yet.
+
+% ---------------------------------------------------------------------------
+\entry{6 Oct 2026}{P0: merges, slide fix, proposal sentence}
+\field{What}Merged \pr{20} (\f{c08a5f7}) and \pr{21} (\f{48c8581}, after resolving one conflict). Corrected slide 2 of the deck: max flow 22 (not 25), reduction 77\% (not 80\%), saved as \f{st\_NIP\_corrected.pptx}. Posted the corrected proposal results sentence on \iss{18}.
+
+% ---------------------------------------------------------------------------
+\entry{6 Oct 2026}{Repository review and priority list}
+\field{What}Read the code, issues and PRs; ranked next steps (P0 unblock, P1 hard instances and baselines, P2 experiments, P3 blocked items).
+
+\end{document}
