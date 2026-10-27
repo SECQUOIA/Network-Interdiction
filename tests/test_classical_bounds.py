@@ -147,7 +147,7 @@ def test_all_solver_and_baseline_bars_do_not_overlap_adjacent_instances(tmp_path
     output = tmp_path / 'all_series.pdf'
     plot.draw(series, ['first instance', 'second instance'], 'Flow reduction',
               (0, 1.1), output)
-    assert len(bars) == 18
+    assert len(bars) == 2 * len(series)
     # Matplotlib emits one rectangle per instance for each series. Compare
     # the actual rendered extents, independently of the position helper.
     first_group, second_group = bars[::2], bars[1::2]

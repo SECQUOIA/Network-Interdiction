@@ -26,6 +26,32 @@ SA_NIP_Greedy   same, after improve_dwave_solution() repairs each sample to
                 exactly B interdicted edges
 SA_QUBO         lowest QUBO energy the annealer reached
 QA_*            the same three columns for the D-Wave QPU path
+QCI_NIP, QCI_NIP_Greedy, QCI_QUBO
+                corresponding Dirac-3 binary-mode columns; optional QCI_*
+                record diagnostics follow the same <=20-record protocol
+QCI_time_sec    worker startup, authentication, upload, queue and sampling wall
+                time; QCI_repair_time_sec measures diagnostics and greedy repair
+QCI_device_usage_sec
+                vendor-reported rounded billable device usage, NOT precise
+                execution/QPU time; empty when unavailable or QCI not run
+QCI_job_id, QCI_device, QCI_client_version
+                identifies the actual submitted job, device and isolated SDK
+QAOA_NIP, QAOA_NIP_Greedy, QAOA_QUBO
+                corresponding Qiskit Aer penalty-QAOA results, with the same
+                raw/pre-greedy diagnostics as other samplers
+QAOA_time_sec   circuit building, angle training and shots; excludes BQM and
+                exact-reference construction; QAOA_repair_time_sec is separate
+QAOA_metadata   JSON: controls, angles, variable order, versions, stage wall times,
+                evaluations and circuit depth/two-qubit gates before hardware routing
+SA_raw_feasible_count, QA_raw_feasible_count
+                budget-feasible records among <=20 lowest-energy raw samples;
+                *_raw_samples_examined is the actual denominator
+SA_raw_samples, QA_raw_samples
+                JSON records with energies, occurrence counts, interdicted
+                arcs, actual surviving flows and budget-feasibility flags
+*_pre_greedy_*  corresponding diagnostics for the greedy-repair input pool;
+                for QA this is after classical steepest descent, so it can
+                differ from raw; SA has no descent stage
 Greedy          surviving flow after interdicting B arcs greedily from an
                 empty interdiction, one highest-impact arc at a time
 Random_Greedy   best surviving flow over 20 random interdictions (each arc
@@ -170,6 +196,8 @@ SOLVER_COLUMNS = {
     'sa': ('SA_NIP', 'SA_NIP_Greedy', 'SA_QUBO'),
     'qa': ('QA_NIP(advantage1)', 'QA_NIP(advantage1)_Greedy',
            'QA_QUBO(advantage1)'),
+    'qci': ('QCI_NIP', 'QCI_NIP_Greedy', 'QCI_QUBO'),
+    'qaoa': ('QAOA_NIP', 'QAOA_NIP_Greedy', 'QAOA_QUBO'),
 }
 
 # Classical baseline passes -> the column each fills. Kept out of
@@ -187,7 +215,11 @@ BASELINE_COLUMNS = {
 TIME_COLUMNS = ['Gurobi_time_sec', 'SA_time_sec', 'SA_repair_time_sec',
                 'Greedy_time_sec', 'Random_Greedy_time_sec', 'LP_time_sec',
                 'LP_repair_time_sec', 'Lagrangian_time_sec', 'Benders_time_sec',
-                'Gurobi_total_time_sec', 'SA_total_time_sec', 'Reference_time_sec']
+                'Gurobi_total_time_sec', 'SA_total_time_sec', 'Reference_time_sec',
+                'QCI_time_sec', 'QCI_repair_time_sec',
+                'QAOA_time_sec', 'QAOA_repair_time_sec']
+QCI_METADATA_COLUMNS = ['QCI_device_usage_sec', 'QCI_job_id', 'QCI_device',
+                        'QCI_client_version']
 TRAJECTORY_COLUMN = 'Gurobi_trajectory'
 FLOW_COLUMNS = [col for cols in SOLVER_COLUMNS.values() for col in cols[:2]] \
     + list(BASELINE_COLUMNS.values())
@@ -196,9 +228,23 @@ BOUND_COLUMNS = ['LP_lower_bound', 'LP_objective', 'Lagrangian_lower_bound',
                  'Benders_status', 'Benders_iterations', 'Benders_history',
                  'Benders_interdicted_edges'] \
     + [col + '_gap' for col in FLOW_COLUMNS]
+SAMPLE_FIELDS = ['raw_feasible_count', 'raw_samples_examined', 'raw_samples',
+                 'pre_greedy_feasible_count', 'pre_greedy_samples_examined',
+                 'pre_greedy_samples']
+SAMPLE_COLUMNS = [f'{solver.upper()}_{field}'
+                  for solver in SOLVER_COLUMNS for field in SAMPLE_FIELDS]
 
 CSV_COLUMNS = CSV_COLUMNS[:-1] + list(BASELINE_COLUMNS.values()) + \
-    CSV_COLUMNS[-1:] + TIME_COLUMNS + BOUND_COLUMNS + [TRAJECTORY_COLUMN]
+    CSV_COLUMNS[-1:] + list(SOLVER_COLUMNS['qci']) + list(SOLVER_COLUMNS['qaoa']) + \
+    TIME_COLUMNS + BOUND_COLUMNS + SAMPLE_COLUMNS + QCI_METADATA_COLUMNS + \
+    ['QAOA_metadata', TRAJECTORY_COLUMN]
+
+# Optional columns used by the bounded matched-cohort exporter.
+# They are not additional passes in this unbounded per-case CLI.
+DECOMPOSITION_COLUMNS = {f'{rule}_{mode}': f'Decomp_{rule}_{mode}'
+                         for rule in ('mincut', 'local', 'marginal', 'multiplier')
+                         for mode in ('sequential', 'iterated')}
+CSV_COLUMNS += list(DECOMPOSITION_COLUMNS.values())
 
 DEFAULT_MAX_EXACT_VARS = 24
 
@@ -411,7 +457,8 @@ def gurobi_trajectory(di_g, src_node, tgt_node, B, threads):
 def run_case(instance, B, curr_λ, exact_backend, solvers,
              max_exact_vars=DEFAULT_MAX_EXACT_VARS, baselines=(), rng=None,
              sa_seed=None, gurobi_threads=ni.DEFAULT_GUROBI_THREADS,
-             benders_time_limit=60.0, benders_max_iterations=1000):
+             benders_time_limit=60.0, benders_max_iterations=1000,
+             qci_options=None, qaoa_options=None):
     """
     Compute one CSV row. `instance` is a path to a flow file; `curr_λ` is a
     float or 'auto' (pick it from the exact window, see the module
@@ -422,6 +469,27 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
     dedicated solve on `gurobi_threads` threads.
     """
     di_g, src_node, tgt_node = ni.read_flow_file(instance)
+
+    if 'qaoa' in solvers:
+        from solve_qubo_via_qaoa import validate_options, validate_bqm
+        options = dict(qaoa_options or {})
+        engine = options.pop('engine', 'aer')
+        if engine == 'ibm':
+            from qaoa_ibm import validate_options as validate_ibm_options, is_local_backend
+            backend = options.pop('backend')
+            validate_ibm_options(seed_transpiler=0 if sa_seed is None else sa_seed, **options)
+            qubit_limit = min(options.get('max_qubits', 127), backend.num_qubits)
+            if is_local_backend(backend):
+                qubit_limit = min(qubit_limit, 24)
+        elif engine == 'aer':
+            validate_options(seed=0 if sa_seed is None else sa_seed, **options)
+            qubit_limit = options.get('max_qubits', 24)
+        else:
+            raise ValueError(f'unknown QAOA engine {engine!r}')
+        # Positive placeholders count actual compiled variables before an exact
+        # reference or penalty-window scan can dispatch expensive solves.
+        sizing_bqm = ni.nip_to_qubo(B, di_g, src_node, tgt_node, 1, 2)
+        validate_bqm(sizing_bqm, qubit_limit)
 
     row = {column: '' for column in CSV_COLUMNS}
     row.update({
@@ -466,13 +534,27 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
 
     for solver in solvers:
         start = time.perf_counter()
+        options = {'qci_options': qci_options} if solver == 'qci' else {}
+        if solver == 'qaoa':
+            options = {'qaoa_options': qaoa_options}
         result = ni.qubo_verify_parameters(
             str(instance), di_g, curr_λ, src_node, tgt_node, B, solver=solver,
-            seed=sa_seed)
+            seed=sa_seed, **options)
         if solver == 'sa':
             row['SA_total_time_sec'] = time.perf_counter() - start
             row['SA_time_sec'] = result['sample_time_sec']
             row['SA_repair_time_sec'] = result['postprocess_time_sec']
+        if solver == 'qci':
+            row['QCI_time_sec'] = result['sample_time_sec']
+            row['QCI_repair_time_sec'] = result['postprocess_time_sec']
+            info = result['sampler_info']
+            for field in QCI_METADATA_COLUMNS:
+                value = info.get(field.lower())
+                row[field] = '' if value is None else value
+        if solver == 'qaoa':
+            row['QAOA_time_sec'] = result['sample_time_sec']
+            row['QAOA_repair_time_sec'] = result['postprocess_time_sec']
+            row['QAOA_metadata'] = json.dumps(result['sampler_info']['qaoa_metadata'])
         nip_col, greedy_col, qubo_col = SOLVER_COLUMNS[solver]
         before = result['best_obj_before_greedy']
         # inf means not one of the 20 best samples stayed inside the budget.
@@ -482,6 +564,10 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
         row[nip_col] = '' if math.isinf(before) else before
         row[greedy_col] = result['best_obj_after_greedy']
         row[qubo_col] = result['best_energy']
+        for field in SAMPLE_FIELDS:
+            value = result[field]
+            row[f'{solver.upper()}_{field}'] = (json.dumps(value)
+                                               if isinstance(value, list) else value)
 
     if 'greedy' in baselines:
         start = time.perf_counter()
@@ -560,7 +646,7 @@ def parse_solvers(spec):
     for solver in solvers:
         if solver not in SOLVER_COLUMNS:
             raise argparse.ArgumentTypeError(
-                f"unknown solver {solver!r}, expected sa and/or qa")
+                f"unknown solver {solver!r}, expected one of {tuple(SOLVER_COLUMNS)}")
     return solvers
 
 
@@ -616,6 +702,33 @@ def provenance_lines(args, solvers, baselines, rows=()):
     ]
     if 'sa' in solvers:
         lines.append(f"simulated annealing seed: {args.seed}")
+    if 'qci' in solvers:
+        lines.append(f"QCI Dirac-3 binary integer mode; samples: {args.qci_samples}; "
+                     f"relaxation schedule: {args.qci_relaxation_schedule}; "
+                     f"worker timeout: {args.qci_timeout} seconds; no automatic job resubmission")
+        lines.append('QCI_time_sec includes worker startup/authentication/upload/queue/results; '
+                     'QCI_device_usage_sec is rounded billable usage, not precise QPU time')
+    if 'qaoa' in solvers:
+        if args.qaoa_engine == 'ibm':
+            lines.append(f'QAOA: IBM Runtime fixed angles, backend={args.ibm_backend}, '
+                         f'p={args.qaoa_reps}, shots={args.qaoa_shots}, '
+                         f'max_qubits={args.qaoa_max_qubits}, transpiler seed={args.seed}; '
+                         'no angle optimization; hardware submission')
+            lines.append('QAOA_time_sec includes transpilation/submission/queue/results; '
+                         'QAOA_metadata records job ID, routed resources and service usage '
+                         '(accounting, not circuit duration); no automatic resubmission')
+        else:
+            lines.append(f'QAOA: Qiskit Aer statevector, p={args.qaoa_reps}, '
+                         f'shots={args.qaoa_shots}, COBYLA maxiter={args.qaoa_maxiter}, '
+                         f'max_qubits={args.qaoa_max_qubits}, seed={args.seed}; no hardware')
+            lines.append('QAOA_time_sec includes circuit building/training/shots; '
+                         'QAOA_metadata records stage times, angles and logical circuit resources')
+    if solvers:
+        lines.append('raw feasibility counts budget-feasible SampleSet records among '
+                     'the <=20 lowest-energy raw records, not occurrence-weighted reads; '
+                     'the examined denominator and record diagnostics are retained')
+        lines.append('pre_greedy diagnostics describe the repair input pool; '
+                     'QA includes classical steepest descent, SA/QCI/QAOA equal raw')
     if args.exact == 'gurobi':
         lines.append(f"Gurobi trajectory solve threads: {args.gurobi_threads}")
     if 'lp' in baselines:
@@ -681,9 +794,33 @@ def main(argv=None):
         '--exact', choices=['gurobi', 'brute'], default='gurobi',
         help='backend for the Opt_NIP/Opt_QUBO columns (default: gurobi)')
     parser.add_argument(
-        '--solvers', type=parse_solvers, default='sa', metavar='sa[,qa]',
-        help="annealing passes to run: 'sa', 'qa', 'sa,qa' or 'none' "
+        '--solvers', type=parse_solvers, default='sa', metavar='sa[,qa,qci,qaoa]',
+        help="comma-separated passes from 'sa', 'qa', 'qci', 'qaoa', or 'none' "
              '(default: sa)')
+    parser.add_argument('--qci-python', help='Python executable in the separate QCI '
+                        'environment (default: QCI_PYTHON environment variable)')
+    parser.add_argument('--qci-samples', type=int, default=20,
+                        help='Dirac-3 samples, 1..100 (default: 20)')
+    parser.add_argument('--qci-relaxation-schedule', type=int, choices=[1, 2, 3, 4],
+                        default=1, help='Dirac-3 relaxation schedule (default: 1)')
+    parser.add_argument('--qci-timeout', type=float, default=300,
+                        help='worker wall-time limit in seconds; does not cancel a remote job')
+    parser.add_argument('--qaoa-reps', type=int, default=1, help='QAOA layers (default: 1)')
+    parser.add_argument('--qaoa-shots', type=int, default=2500, help='Aer shots (default: 2500)')
+    parser.add_argument('--qaoa-maxiter', type=int, default=100,
+                        help='COBYLA evaluation limit; at least 2*reps+2 (default: 100)')
+    parser.add_argument('--qaoa-max-qubits', type=int, default=24,
+                        help='variable limit; Aer permits at most 24 (default: 24)')
+    parser.add_argument('--qaoa-engine', choices=['aer', 'ibm'], default='aer',
+                        help='Aer training+sampling, or IBM Runtime fixed-angle sampling')
+    parser.add_argument('--ibm-backend', help='explicit device name from a saved IBM Runtime account')
+    parser.add_argument('--ibm-theta', type=float, nargs='+',
+                        help='2*p fixed angles in beta-then-gamma order, same normalized Hamiltonian')
+    parser.add_argument('--ibm-max-depth', type=int, default=10000)
+    parser.add_argument('--ibm-timeout', type=float, default=300,
+                        help='cooperative result-polling timeout; does not cancel remote jobs')
+    parser.add_argument('--ibm-max-execution-time', type=int, default=300,
+                        help='service execution cap in seconds, excluding queue time')
     parser.add_argument(
         '--baselines', type=parse_baselines, default='greedy,random',
         metavar='greedy,random,lp,lagrangian,benders',
@@ -696,7 +833,7 @@ def main(argv=None):
                         help='maximum master solves per Benders pass (default 1000)')
     parser.add_argument(
         '--seed', type=int, default=0,
-        help='seed for simulated annealing and the random baseline '
+        help='seed for simulated annealing, QAOA and the random baseline '
              '(default: 0)')
     parser.add_argument(
         '--gurobi-threads', type=int, default=ni.DEFAULT_GUROBI_THREADS,
@@ -712,6 +849,33 @@ def main(argv=None):
 
     solvers = args.solvers if isinstance(args.solvers, list) else \
         parse_solvers(args.solvers)
+    if 'qci' in solvers and (not 1 <= args.qci_samples <= 100
+                            or not math.isfinite(args.qci_timeout) or args.qci_timeout <= 0):
+        parser.error('QCI samples must be in 1..100 and timeout must be finite and positive')
+    qci_options = dict(python_executable=args.qci_python, num_samples=args.qci_samples,
+                       relaxation_schedule=args.qci_relaxation_schedule,
+                       timeout_sec=args.qci_timeout)
+    qaoa_options = dict(reps=args.qaoa_reps, shots=args.qaoa_shots,
+                        maxiter=args.qaoa_maxiter, max_qubits=args.qaoa_max_qubits)
+    if 'qaoa' in solvers:
+        try:
+            if args.qaoa_engine == 'ibm':
+                from qaoa_ibm import validate_options as validate_ibm_options
+                if not args.ibm_backend:
+                    raise ValueError('--qaoa-engine ibm requires --ibm-backend')
+                qaoa_options = dict(theta=args.ibm_theta, reps=args.qaoa_reps,
+                    shots=args.qaoa_shots, max_qubits=args.qaoa_max_qubits,
+                    max_depth=args.ibm_max_depth, result_timeout_sec=args.ibm_timeout,
+                    max_execution_time_sec=args.ibm_max_execution_time)
+                validate_ibm_options(seed_transpiler=args.seed, **qaoa_options)
+            else:
+                from solve_qubo_via_qaoa import validate_options
+                validate_options(seed=args.seed, **qaoa_options)
+        except ValueError as error:
+            parser.error(str(error))
+        if args.qaoa_engine == 'ibm':
+            from qiskit_ibm_runtime import QiskitRuntimeService
+            qaoa_options.update(engine='ibm', backend=QiskitRuntimeService().backend(args.ibm_backend))
     baselines = args.baselines if isinstance(args.baselines, list) else \
         parse_baselines(args.baselines)
     if 'benders' in baselines:
@@ -731,7 +895,8 @@ def main(argv=None):
                              sa_seed=args.seed,
                              gurobi_threads=args.gurobi_threads,
                              benders_time_limit=args.benders_time_limit,
-                             benders_max_iterations=args.benders_max_iterations))
+                             benders_max_iterations=args.benders_max_iterations,
+                             qci_options=qci_options, qaoa_options=qaoa_options))
 
     write_csv(args.out, rows,
               provenance_lines(args, solvers, baselines, rows))

@@ -10,9 +10,12 @@ def count_qubit_usage(emb):
         count += len(emb[logical_qubit])
     return count
 
-def solve_bqm_dwave(bqm, annealer_type, seed=None):
+def solve_bqm_dwave(bqm, annealer_type, seed=None, *, return_raw=False):
     """Sample `bqm` with the QPU ('qa') or simulated annealing ('sa').
-    `seed` seeds simulated annealing (ignored for 'qa')."""
+    `seed` seeds simulated annealing (ignored for 'qa').
+    With return_raw=True, return (processed, raw) SampleSets so diagnostics
+    can distinguish QPU samples from classical steepest descent. The default
+    return remains the processed SampleSet; SA has no descent stage."""
     if annealer_type == 'qa':
         # qpu_advantage = DWaveSampler(solver='Advantage2_system1.3')
         qpu_advantage = DWaveSampler(solver='Advantage_system6.4')
@@ -24,11 +27,11 @@ def solve_bqm_dwave(bqm, annealer_type, seed=None):
         sampleset = sampler.sample(bqm, num_reads=2500, annealing_time=50)
         solver_greedy = SteepestDescentSolver()
         sampleset_greedy = solver_greedy.sample(bqm, initial_states=sampleset)  
-        return sampleset_greedy
+        return (sampleset_greedy, sampleset) if return_raw else sampleset_greedy
     elif annealer_type == 'sa':
         sampler = neal.SimulatedAnnealingSampler()
         sampleset = sampler.sample(bqm, num_reads=2500, seed=seed)
-        return sampleset
+        return (sampleset, sampleset) if return_raw else sampleset
     else:
         print('Unsupported D-Wave sampler, only supports sa and qa')
         exit(1)

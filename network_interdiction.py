@@ -10,6 +10,7 @@ import solve_qubo_via_dwave
 import random
 import time
 from pyqubo import Binary
+from numbers import Real
 
 DEFAULT_GUROBI_THREADS = 8
 
@@ -493,7 +494,8 @@ def solve_nip_gurobi_trajectory(G, src_node, tgt_node, B, threads=None):
         'trajectory': [(t, surviving_flow(cut)) for t, cut in incumbents],
     }
 
-def improve_dwave_solution(di_g, x, src_node, tgt_node, B, candidate_edges=None):
+def improve_dwave_solution(di_g, x, src_node, tgt_node, B, candidate_edges=None,
+                            *, flow_oracle=None):
     """
     Greedily add/remove interdicted edges so exactly B edges are
     interdicted, then return the resulting edge set and its max-flow
@@ -503,6 +505,10 @@ def improve_dwave_solution(di_g, x, src_node, tgt_node, B, candidate_edges=None)
     (issue #14: a decomposition piece may only interdict the arcs it owns,
     so there must be at least B of them). By default every edge is a
     candidate, as before.
+
+    Optional `flow_oracle(cut)` supplies the same surviving-flow score. Bounded
+    benchmark callers use it to count/cache max-flow work and enforce a shared
+    deadline; exceptions propagate so the caller can retain its audited incumbent.
 
     `x` is a 0/1 array indexed like sorted(di_g.edges()) -- the caller's
     own decode of its sample, not a raw sample dict. This used to decompose
@@ -518,6 +524,8 @@ def improve_dwave_solution(di_g, x, src_node, tgt_node, B, candidate_edges=None)
     re-fixing it to match one format again.
     """
     def compute_objective(di_g, src_node, tgt_node, interdicted_edges):
+        if flow_oracle is not None:
+            return flow_oracle(interdicted_edges)
         di_g_copy = di_g.copy()
         for (u,v) in interdicted_edges:
             di_g_copy.remove_edge(u,v)
@@ -1115,7 +1123,7 @@ def solve_nip_qubo_repair_once_end(name, di_g, λ_min, λ_max, src_node, tgt_nod
     # print('------------------------------------')
 
 def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_penalty_coeff,
-                interdictable=None):
+                interdictable=None, *, budget_penalty='linear'):
     """
     Build the NIP as a BQM: x_i (interdict), gamma_i (arc in the cut) and
     w_i (the auxiliary that quadratises the cut constraint) for arc i of
@@ -1132,7 +1140,15 @@ def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_pen
     while leaving its ground state the piece's restricted optimum. The
     x_i/gamma_i/w_i names of the arcs that remain keep their index in the
     full sorted edge list, so a sample decodes the same way either way.
+
+    `budget_penalty='linear'` preserves the Lagrangian term λ(Σx-B).
+    The opt-in 'squared' form uses λ(Σx-B)² and adds a clique among the
+    interdiction variables. It enforces exactly B, not all assignments with
+    at most B. See certified_penalties.certified_squared_qubo for validated
+    closed-form coefficients; β > λ alone is not its safety condition.
     """
+    if budget_penalty not in ('linear', 'squared'):
+        raise ValueError("budget_penalty must be 'linear' or 'squared'")
     num_nodes = len(di_g.nodes())
     num_edges = len(di_g.edges())
 
@@ -1164,8 +1180,10 @@ def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_pen
         if unknown:
             raise ValueError(f"interdictable arcs not in the graph: {sorted(unknown)}")
 
+    mismatch = sum(var_x[i] for i in range(num_edges)
+                   if edge_list[i] in interdictable) - B
     obj = cardinality_penalty_coeff * (
-        sum(var_x[i] for i in range(num_edges) if edge_list[i] in interdictable) - B)
+        mismatch if budget_penalty == 'linear' else mismatch ** 2)
 
     for i in range(len(edge_list)):
         (u,v) = edge_list[i]
@@ -1191,17 +1209,21 @@ def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_pen
         obj += di_g[u][v]['weight'] * (1 - var_x[i]) * var_gamma[i]
         obj += dual_penalty_coeff * (temp_pi_u - temp_pi_u * temp_pi_v - temp_pi_u * var_gamma[i] + var_w[i] * (temp_pi_u + temp_pi_v + var_gamma[i] - 1) + (temp_pi_u * temp_pi_v + temp_pi_u * var_gamma[i] + temp_pi_v * var_gamma[i]) - (temp_pi_u + temp_pi_v + var_gamma[i]))
 
+    if isinstance(obj, Real):
+        return dimod.BinaryQuadraticModel({}, {}, float(obj), dimod.BINARY)
     model = obj.compile()
     bqm = model.to_bqm()
     return bqm
 
-def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver='sa', seed=None):
+def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver='sa', seed=None,
+                           *, qci_options=None, qaoa_options=None):
     """
     Build the QUBO for `di_g` at penalty coefficients (curr_λ, curr_λ+1),
-    sample it with `solver` ('sa' = dwave-neal, 'qa' = D-Wave QPU), and
+    sample it with `solver` ('sa' = dwave-neal, 'qa' = D-Wave QPU,
+    'qci' = Dirac-3 binary integer mode, 'qaoa' = Aer or IBM Runtime), and
     report the best solutions found.
 
-    Returns a dict for the 'sa'/'qa' paths (None for any other solver):
+    Returns a dict for all supported solver paths:
 
         best_energy             lowest QUBO energy in the sampleset
         best_obj_before_greedy  lowest max-flow objective among the 20
@@ -1213,9 +1235,33 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
         interdicted_edges       the edge set achieving best_obj_after_greedy
         sample_time_sec         wall time of the sampler call alone
         postprocess_time_sec    wall time to decode, evaluate and repair the
-                                20 best samples
+                                selected samples, including raw diagnostics
+        raw_feasible_count      budget-feasible records among the <=20
+                                lowest-energy raw sampler records
+        raw_samples_examined    denominator for raw_feasible_count
+        raw_samples             those records' energies, occurrences, cuts,
+                                surviving flows and budget-feasibility flags
+        pre_greedy_feasible_count, pre_greedy_samples_examined, pre_greedy_samples
+                                same diagnostics for the pool passed to the
+                                interdiction greedy repair (after classical
+                                steepest descent for QA; identical to raw for SA/QCI/QAOA)
+        sampler_info            QCI job ID, device, SDK version and rounded
+                                billable device usage; QAOA run metadata;
+                                empty for SA/QA
 
-    ``seed`` is passed to the simulated-annealing sampler (ignored for 'qa').
+    Counts refer to SampleSet records, not occurrence-weighted reads or unique
+    bitstrings. Feasibility here means sum(x) <= B only, not QUBO dual feasibility.
+    Short SampleSets use every available record; an empty set raises ValueError.
+
+    ``seed`` seeds SA and QAOA (ignored for 'qa'/'qci').
+    ``qci_options`` is passed to solve_bqm_qci; that path submits one hardware
+    job through the separate SDK environment. Its sampler time includes worker
+    startup, authentication, upload, queue and result retrieval.
+    ``qaoa_options`` configures solve_bqm_qaoa; seed also seeds its measurements.
+    With engine='ibm', options configure qaoa_ibm.solve_bqm_ibm instead and seed
+    seeds transpilation (and local simulation), not physical measurements.
+    Sampler time includes circuit construction and shots; Aer also trains angles,
+    while IBM uses supplied fixed angles and includes submission/queue/results.
     Neither time includes building the QUBO, matching Gurobi's Runtime,
     which excludes building the model.
 
@@ -1291,26 +1337,52 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
     #     subprocess.run(['julia','nip_cubic.jl',name, str(curr_λ), str(B)], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
     
-    if solver == 'sa' or solver == 'qa':
+    if solver in ('sa', 'qa', 'qci', 'qaoa'):
         bqm = nip_to_qubo(B, di_g, src_node, tgt_node, curr_λ, curr_λ+1)
         sample_start = time.perf_counter()
-        sampleset = solve_qubo_via_dwave.solve_bqm_dwave(bqm, solver, seed=seed)
+        if solver == 'qci':
+            from solve_qubo_via_qci import solve_bqm_qci
+            sampleset = raw_sampleset = solve_bqm_qci(bqm, **(qci_options or {}))
+        elif solver == 'qaoa':
+            options = dict(qaoa_options or {})
+            engine = options.pop('engine', 'aer')
+            if engine == 'ibm':
+                from qaoa_ibm import solve_bqm_ibm
+                sampleset = raw_sampleset = solve_bqm_ibm(
+                    bqm, seed_transpiler=0 if seed is None else seed, **options)
+            elif engine == 'aer':
+                from solve_qubo_via_qaoa import solve_bqm_qaoa
+                sampleset = raw_sampleset = solve_bqm_qaoa(
+                    bqm, seed=0 if seed is None else seed, **options)
+            else:
+                raise ValueError(f'unknown QAOA engine {engine!r}')
+        else:
+            sampleset, raw_sampleset = solve_qubo_via_dwave.solve_bqm_dwave(
+                bqm, solver, seed=seed, return_raw=True)
         sample_time_sec = time.perf_counter() - sample_start
         postprocess_start = time.perf_counter()
-        records = sampleset.record
-        records = sorted(records, key=lambda x:x[1])
-        variable_labels = sampleset.variables
-        best_samples = []
-        best_energies = []
+        def select_records(sample_set):
+            if not len(sample_set):
+                raise ValueError('sampler returned an empty SampleSet')
+            # Stable energy order preserves the historical tie behavior.
+            return [(dict(zip(sample_set.variables, record.sample)),
+                     float(record.energy), int(record.num_occurrences))
+                    for record in sorted(sample_set.record,
+                                         key=lambda record: record.energy)[:20]]
 
-        for k in range(20):
-            curr_sample = records[k][0]
-            curr_sample_dict = {}
-            for m in range(len(variable_labels)):
-                curr_sample_dict[variable_labels[m]] = curr_sample[m]
-            best_samples.append(curr_sample_dict)
-            best_energies.append(records[k][1])
+        selected = select_records(sampleset)
+        raw_selected = (selected if raw_sampleset is sampleset
+                        else select_records(raw_sampleset))
+        best_samples = [sample for sample, _, _ in selected]
+        best_energies = [energy for _, energy, _ in selected]
         edge_list = sorted(di_g.edges(), key=lambda element: (element[0], element[1]))
+
+        def diagnostic(rank, energy, occurrences, edges, flow):
+            return {'rank': rank, 'energy': energy, 'num_occurrences': occurrences,
+                    'interdicted_edges': edges, 'flow': flow,
+                    'budget_feasible': len(edges) <= B}
+
+        pre_greedy_records = []
 
         best_sol_interdicted_edge = []
         best_sol_after_greedy = np.inf
@@ -1331,6 +1403,9 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
 
             curr_obj = compute_objective(di_g, x, γ)
 
+            pre_greedy_records.append(diagnostic(
+                ite + 1, curr_energy, selected[ite][2], interdicted_edges, curr_obj))
+
             if curr_obj < best_sol_before_greedy and num_interdicted_edge <= B:
                 best_sol_before_greedy = curr_obj
 
@@ -1348,6 +1423,15 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
                 best_sol_after_greedy = objective_improved
                 best_sol_interdicted_edge = interdicted_edges_improved
 
+        if raw_sampleset is sampleset:
+            raw_records = pre_greedy_records
+        else:
+            raw_records = []
+            for rank, (sample, energy, occurrences) in enumerate(raw_selected, 1):
+                edges = [edge for i, edge in enumerate(edge_list) if sample[f'x_{i}'] == 1]
+                flow = compute_objective_maxflow(di_g, src_node, tgt_node, edges)
+                raw_records.append(diagnostic(rank, energy, occurrences, edges, flow))
+
         postprocess_time_sec = time.perf_counter() - postprocess_start
         print(f'Best energy: {best_energies[0]}')
         print(f'Best objective before greedy improvement: {best_sol_before_greedy}')
@@ -1361,14 +1445,14 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
             'interdicted_edges': best_sol_interdicted_edge,
             'sample_time_sec': sample_time_sec,
             'postprocess_time_sec': postprocess_time_sec,
+            'raw_feasible_count': sum(record['budget_feasible'] for record in raw_records),
+            'raw_samples_examined': len(raw_records),
+            'raw_samples': raw_records,
+            'pre_greedy_feasible_count': sum(record['budget_feasible'] for record in pre_greedy_records),
+            'pre_greedy_samples_examined': len(pre_greedy_records),
+            'pre_greedy_samples': pre_greedy_records,
+            'sampler_info': dict(sampleset.info) if solver in ('qci', 'qaoa') else {},
         }
-
-    elif solver == 'qci':
-        # NOTE: solve_qubo_via_qci is not imported anywhere in this module
-        # -- this branch will raise NameError if ever reached. Flagged, not
-        # fixed here (out of scope for issue #7/#8); 'sa' is the only
-        # solver path main() actually exercises.
-        curr_best_sample = solve_qubo_via_qci.solver_qubo_dirac1(f"./qubos/{name}_{curr_λ}.qubo", di_g)
 
     else:
         print(f"Unsupported solver: {solver}")

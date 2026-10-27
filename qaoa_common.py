@@ -118,7 +118,7 @@ def _family_key(label):
     return VARIABLE_FAMILIES.index(family), int(index)
 
 
-def rcm_order(bqm):
+def rcm_order(bqm, initial_order=None):
     """
     The QUBO variables in reverse Cuthill-McKee order of their interaction
     graph, which keeps coupled variables close together.
@@ -129,9 +129,12 @@ def rcm_order(bqm):
     finished after ten minutes; in this order a 40-qubit k-NN instance takes
     0.1 s, and a 53-qubit planar one 4.5 s with the bond dimension capped at
     64. The order is deterministic across Python hash seeds: the traversal
-    uses stable integer node IDs instead of randomized string hashes.
+    uses stable integer node IDs instead of randomized string hashes. An optional
+    initial_order supports generic BQM labels; the default retains NIP family order.
     """
-    variables = variable_order(bqm)
+    variables = variable_order(bqm) if initial_order is None else list(initial_order)
+    if len(variables) != len(bqm) or set(variables) != set(bqm.variables):
+        raise ValueError('initial order must contain each BQM variable exactly once')
     position = {label: i for i, label in enumerate(variables)}
     graph = nx.Graph()
     graph.add_nodes_from(range(len(variables)))
