@@ -1,0 +1,54 @@
+{
+  "source_commit": "6a15009a9b597f62f5148bfec1b0534b6e5689af",
+  "command": "python run_benchmark.py --exact brute --solvers sa,qaoa --baselines greedy --case testcases/tiny_a.flow:1:auto --case testcases/tiny_b.flow:2:auto --seed 0 --qaoa-reps 1 --qaoa-shots 2500 --qaoa-maxiter 20 --qaoa-max-qubits 24 --out results/shared_sa_qaoa.csv",
+  "csv_sha256": "b9e51fdf90a8202959c585188063dfe3ba0d4c184982ae320e00663bf0abad93",
+  "input_sha256": {
+    "testcases/tiny_a.flow": "bccab546d813409057711aed1771d55682d84eeff1fd49659308dd655a51dcbb",
+    "testcases/tiny_b.flow": "4242dc6ea7f29be211f6b7c6a5f132e6fcb31afbd508edc385c2e2725636c41e"
+  },
+  "source_sha256": {
+    "network_interdiction.py": "645dffba332020bec607e46388faef327ecd58504c78a22d92850d8312913b88",
+    "run_benchmark.py": "6c8ab056703229b6b072940882b99ff38ceacbe60f7b6d63ab8e8efabf246acb",
+    "solve_qubo_via_qaoa.py": "6cd07e1f469481caaff65993959ca6496c37e1f8848bc537fcc6f582080d2f9b",
+    "qaoa_common.py": "30ead93660d2f012a084bf5b26595568e4539e9464cdb8dd730715aa902a0552",
+    "qaoa_qiskit.py": "30edaa414ca3f9d2ac65d09a509a7e20f1840c5c713fcf19f0c262e286c57aa9",
+    "solve_qubo_via_dwave.py": "bc8829130497a6feee9a02c9c58013817b7e57d754cc611e8e427a269e9cdcb4"
+  },
+  "python": "3.12.12",
+  "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "packages": {
+    "numpy": "1.26.4",
+    "scipy": "1.17.1",
+    "networkx": "3.7",
+    "dimod": "0.12.22",
+    "pyqubo": "1.5.0",
+    "dwave-samplers": "1.8.0",
+    "dwave-neal": "0.6.0",
+    "qiskit": "2.4.2",
+    "qiskit-aer": "0.17.2"
+  },
+  "resources": {
+    "virtual_memory_limit_gib": 8,
+    "outer_timeout_sec": 600,
+    "OMP_NUM_THREADS": 1,
+    "OPENBLAS_NUM_THREADS": 1,
+    "MKL_NUM_THREADS": 1
+  },
+  "protocol": {
+    "attempts": 1,
+    "cases": 2,
+    "runs_per_case": 1,
+    "seed": 0,
+    "exact_backend": "brute",
+    "qaoa_reps": 1,
+    "qaoa_maxiter": 20,
+    "qaoa_shots": 2500,
+    "qaoa_max_qubits": 24,
+    "sa_reads": 2500,
+    "sa_sweeps": 1000,
+    "sample_selection": "At most20 lowest-energy SampleSet records; SA records can repeat bitstrings, QAOA records aggregate identical bitstrings. Report occurrence counts and record-count feasibility, not physical-shot success probabilities.",
+    "run_order": "Each case: reference, SA, QAOA, greedy. No dedicated warmup. First QAOA call includes framework import; later calls reuse imported code.",
+    "timing": "SA sampler and QAOA adapter wall times exclude BQM building and shared exact references; QAOA includes circuit build, training and shots. Scoring/repair separate. No statistical speedup inference from these single runs.",
+    "scope": "Two tiny easy synthetic cases; both also solved by greedy. No hardware, physical routing or advantage claim. Circuit dimensions are logical only."
+  }
+}

@@ -172,6 +172,63 @@ decomposition's own.
 
 ## QAOA on simulators (Qiskit and CUDA-Q)
 
+The unified CSV runner also accepts `--solvers qaoa` (or `sa,qaoa`) through
+[solve_qubo_via_qaoa.py](solve_qubo_via_qaoa.py). It uses the existing Qiskit
+Aer statevector backend and COBYLA optimizer, then sends its raw samples through
+the same reference scoring, <=20-lowest-energy-record selection and greedy
+repair as the other solvers. This adapter does not repeat exact NIP solves
+inside the sampler. Install the existing optional `requirements-qaoa.txt`
+alongside core requirements; Qiskit/Aer remain optional for SA/QA/QCI.
+
+```bash
+python run_benchmark.py --exact brute --solvers sa,qaoa --baselines greedy \
+    --case testcases/tiny_a.flow:1:auto --seed 0 \
+    --qaoa-reps 1 --qaoa-shots 2500 --qaoa-maxiter 20 \
+    --qaoa-max-qubits 24 --out results/sa_qaoa.csv
+```
+
+`QAOA_NIP`, `QAOA_NIP_Greedy`, `QAOA_QUBO` and the raw/pre-greedy diagnostics
+follow the same column conventions as SA. QAOA records are distinct observed
+bitstrings with their shot counts; feasibility counts remain unweighted record
+counts, not success probabilities. No classical descent precedes repair.
+`QAOA_time_sec` includes imports, Hamiltonian/circuit construction, angle training
+and final shots. BQM construction and the shared exact reference are excluded;
+`QAOA_repair_time_sec` measures scoring/repair separately. `QAOA_metadata` retains
+angles in beta-then-gamma order, Hamiltonian scale, variable order, versions,
+seed, shots, evaluation count, resource limits and the build/train/sample wall
+times. Circuit depth and two-qubit gate count describe the existing logical
+basis circuit with unconstrained connectivity, before measurement or device
+routing. They are not hardware depth or QPU timing.
+
+The sampler uses one linear-ramp start, `p=1`, 2500 shots and at most 100
+COBYLA evaluations by default. `--qaoa-maxiter` must be at least `2*p+2`,
+COBYLA's minimum; invalid controls and QUBOs beyond the selected limit fail
+before exact-reference work or simulator construction. This benchmark adapter
+caps statevectors at 24 qubits. The standalone modules below still support
+larger approximate MPS runs. An unselected pass or an empty strict lambda
+window leaves all QAOA columns empty. The existing plot still displays SA/QA
+series; QAOA comparison data is available in the CSV. No IBM account or hardware
+submission is involved; Runtime integration and device fitting remain under #17.
+
+The [saved shared-run sample](results/shared_sa_qaoa.csv) and
+[manifest](results/shared_sa_qaoa.json) use seed 0, 2500 SA reads, 2500 Aer
+shots, `p=1` and 20 COBYLA evaluations on each of two tiny instances:
+
+| Case (budget) | Qubits | Exact / greedy / SA / QAOA flow | SA feasible records | QAOA feasible records | SA sampler seconds | QAOA adapter seconds |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `tiny_a` (1) | 14 | 5 | 20/20 | 16/20 | 0.512 | 0.544 |
+| `tiny_b` (2) | 21 | 5 | 20/20 | 16/20 | 0.649 | 14.544 |
+
+Both samplers reach the exact QUBO energy and optimal surviving flow before
+and after repair. The feasibility fractions count selected records only;
+SA can have repeated records while QAOA aggregates identical shot bitstrings.
+These are easy cases that greedy also solves, and single timings have different
+warmup histories: Qiskit imports are charged to the first QAOA call. They do not
+establish a speedup or an advantage. The 21-qubit case is the largest in this
+bounded sample, not a demonstrated simulator limit. All selected cuts are
+independently audited, and source/input hashes are pinned in the manifest.
+
+
 The same QUBO the annealer samples can be solved with a penalty-QAOA, written
 twice: once in Qiskit ([qaoa_qiskit.py](qaoa_qiskit.py), Aer simulators) and
 once in CUDA-Q ([qaoa_cudaq.py](qaoa_cudaq.py)). Issues #3 and #16 start

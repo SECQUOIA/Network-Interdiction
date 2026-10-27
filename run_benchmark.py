@@ -36,6 +36,13 @@ QCI_device_usage_sec
                 execution/QPU time; empty when unavailable or QCI not run
 QCI_job_id, QCI_device, QCI_client_version
                 identifies the actual submitted job, device and isolated SDK
+QAOA_NIP, QAOA_NIP_Greedy, QAOA_QUBO
+                corresponding Qiskit Aer penalty-QAOA results, with the same
+                raw/pre-greedy diagnostics as other samplers
+QAOA_time_sec   circuit building, angle training and shots; excludes BQM and
+                exact-reference construction; QAOA_repair_time_sec is separate
+QAOA_metadata   JSON: controls, angles, variable order, versions, stage wall times,
+                evaluations and circuit depth/two-qubit gates before hardware routing
 SA_raw_feasible_count, QA_raw_feasible_count
                 budget-feasible records among <=20 lowest-energy raw samples;
                 *_raw_samples_examined is the actual denominator
@@ -165,6 +172,7 @@ SOLVER_COLUMNS = {
     'qa': ('QA_NIP(advantage1)', 'QA_NIP(advantage1)_Greedy',
            'QA_QUBO(advantage1)'),
     'qci': ('QCI_NIP', 'QCI_NIP_Greedy', 'QCI_QUBO'),
+    'qaoa': ('QAOA_NIP', 'QAOA_NIP_Greedy', 'QAOA_QUBO'),
 }
 
 # Classical baseline passes -> the column each fills. Kept out of
@@ -178,7 +186,8 @@ BASELINE_COLUMNS = {
 # Wall time per method, and Gurobi's incumbent trajectory (last: it is long).
 TIME_COLUMNS = ['Gurobi_time_sec', 'SA_time_sec', 'SA_repair_time_sec',
                 'Greedy_time_sec', 'Random_Greedy_time_sec',
-                'QCI_time_sec', 'QCI_repair_time_sec']
+                'QCI_time_sec', 'QCI_repair_time_sec',
+                'QAOA_time_sec', 'QAOA_repair_time_sec']
 QCI_METADATA_COLUMNS = ['QCI_device_usage_sec', 'QCI_job_id', 'QCI_device',
                         'QCI_client_version']
 TRAJECTORY_COLUMN = 'Gurobi_trajectory'
@@ -189,8 +198,8 @@ SAMPLE_COLUMNS = [f'{solver.upper()}_{field}'
                   for solver in SOLVER_COLUMNS for field in SAMPLE_FIELDS]
 
 CSV_COLUMNS = CSV_COLUMNS[:-1] + list(BASELINE_COLUMNS.values()) + \
-    CSV_COLUMNS[-1:] + list(SOLVER_COLUMNS['qci']) + TIME_COLUMNS + \
-    SAMPLE_COLUMNS + QCI_METADATA_COLUMNS + [TRAJECTORY_COLUMN]
+    CSV_COLUMNS[-1:] + list(SOLVER_COLUMNS['qci']) + list(SOLVER_COLUMNS['qaoa']) + \
+    TIME_COLUMNS + SAMPLE_COLUMNS + QCI_METADATA_COLUMNS + ['QAOA_metadata', TRAJECTORY_COLUMN]
 
 DEFAULT_MAX_EXACT_VARS = 24
 
@@ -403,7 +412,7 @@ def gurobi_trajectory(di_g, src_node, tgt_node, B, threads):
 def run_case(instance, B, curr_λ, exact_backend, solvers,
              max_exact_vars=DEFAULT_MAX_EXACT_VARS, baselines=(), rng=None,
              sa_seed=None, gurobi_threads=ni.DEFAULT_GUROBI_THREADS,
-             qci_options=None):
+             qci_options=None, qaoa_options=None):
     """
     Compute one CSV row. `instance` is a path to a flow file; `curr_λ` is a
     float or 'auto' (pick it from the exact window, see the module
@@ -414,6 +423,15 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
     dedicated solve on `gurobi_threads` threads.
     """
     di_g, src_node, tgt_node = ni.read_flow_file(instance)
+
+    if 'qaoa' in solvers:
+        from solve_qubo_via_qaoa import validate_options, validate_bqm
+        options = qaoa_options or {}
+        validate_options(seed=0 if sa_seed is None else sa_seed, **options)
+        # Positive placeholders count actual compiled variables before an exact
+        # reference or penalty-window scan can dispatch expensive solves.
+        sizing_bqm = ni.nip_to_qubo(B, di_g, src_node, tgt_node, 1, 2)
+        validate_bqm(sizing_bqm, options.get('max_qubits', 24))
 
     row = {column: '' for column in CSV_COLUMNS}
     row.update({
@@ -454,6 +472,8 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
 
     for solver in solvers:
         options = {'qci_options': qci_options} if solver == 'qci' else {}
+        if solver == 'qaoa':
+            options = {'qaoa_options': qaoa_options}
         result = ni.qubo_verify_parameters(
             str(instance), di_g, curr_λ, src_node, tgt_node, B, solver=solver,
             seed=sa_seed, **options)
@@ -467,6 +487,10 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
             for field in QCI_METADATA_COLUMNS:
                 value = info.get(field.lower())
                 row[field] = '' if value is None else value
+        if solver == 'qaoa':
+            row['QAOA_time_sec'] = result['sample_time_sec']
+            row['QAOA_repair_time_sec'] = result['postprocess_time_sec']
+            row['QAOA_metadata'] = json.dumps(result['sampler_info']['qaoa_metadata'])
         nip_col, greedy_col, qubo_col = SOLVER_COLUMNS[solver]
         before = result['best_obj_before_greedy']
         # inf means not one of the 20 best samples stayed inside the budget.
@@ -582,12 +606,18 @@ def provenance_lines(args, solvers, baselines, rows=()):
                      f"worker timeout: {args.qci_timeout} seconds; no automatic job resubmission")
         lines.append('QCI_time_sec includes worker startup/authentication/upload/queue/results; '
                      'QCI_device_usage_sec is rounded billable usage, not precise QPU time')
+    if 'qaoa' in solvers:
+        lines.append(f'QAOA: Qiskit Aer statevector, p={args.qaoa_reps}, '
+                     f'shots={args.qaoa_shots}, COBYLA maxiter={args.qaoa_maxiter}, '
+                     f'max_qubits={args.qaoa_max_qubits}, seed={args.seed}; no hardware')
+        lines.append('QAOA_time_sec includes circuit building/training/shots; '
+                     'QAOA_metadata records stage times, angles and logical circuit resources')
     if solvers:
         lines.append('raw feasibility counts budget-feasible SampleSet records among '
                      'the <=20 lowest-energy raw records, not occurrence-weighted reads; '
                      'the examined denominator and record diagnostics are retained')
         lines.append('pre_greedy diagnostics describe the repair input pool; '
-                     'QA includes classical steepest descent, SA/QCI equal raw')
+                     'QA includes classical steepest descent, SA/QCI/QAOA equal raw')
     if args.exact == 'gurobi':
         lines.append(f"Gurobi trajectory solve threads: {args.gurobi_threads}")
     if any(case[2] == 'auto' for case in args.cases):
@@ -633,8 +663,8 @@ def main(argv=None):
         '--exact', choices=['gurobi', 'brute'], default='gurobi',
         help='backend for the Opt_NIP/Opt_QUBO columns (default: gurobi)')
     parser.add_argument(
-        '--solvers', type=parse_solvers, default='sa', metavar='sa[,qa,qci]',
-        help="comma-separated passes from 'sa', 'qa', 'qci', or 'none' "
+        '--solvers', type=parse_solvers, default='sa', metavar='sa[,qa,qci,qaoa]',
+        help="comma-separated passes from 'sa', 'qa', 'qci', 'qaoa', or 'none' "
              '(default: sa)')
     parser.add_argument('--qci-python', help='Python executable in the separate QCI '
                         'environment (default: QCI_PYTHON environment variable)')
@@ -644,6 +674,12 @@ def main(argv=None):
                         default=1, help='Dirac-3 relaxation schedule (default: 1)')
     parser.add_argument('--qci-timeout', type=float, default=300,
                         help='worker wall-time limit in seconds; does not cancel a remote job')
+    parser.add_argument('--qaoa-reps', type=int, default=1, help='QAOA layers (default: 1)')
+    parser.add_argument('--qaoa-shots', type=int, default=2500, help='Aer shots (default: 2500)')
+    parser.add_argument('--qaoa-maxiter', type=int, default=100,
+                        help='COBYLA evaluation limit; at least 2*reps+2 (default: 100)')
+    parser.add_argument('--qaoa-max-qubits', type=int, default=24,
+                        help='statevector variable limit, at most 24 (default: 24)')
     parser.add_argument(
         '--baselines', type=parse_baselines, default='greedy,random',
         metavar='greedy[,random]',
@@ -651,7 +687,7 @@ def main(argv=None):
              "'none' (default: greedy,random)")
     parser.add_argument(
         '--seed', type=int, default=0,
-        help='seed for simulated annealing and the random baseline '
+        help='seed for simulated annealing, QAOA and the random baseline '
              '(default: 0)')
     parser.add_argument(
         '--gurobi-threads', type=int, default=ni.DEFAULT_GUROBI_THREADS,
@@ -673,6 +709,14 @@ def main(argv=None):
     qci_options = dict(python_executable=args.qci_python, num_samples=args.qci_samples,
                        relaxation_schedule=args.qci_relaxation_schedule,
                        timeout_sec=args.qci_timeout)
+    qaoa_options = dict(reps=args.qaoa_reps, shots=args.qaoa_shots,
+                        maxiter=args.qaoa_maxiter, max_qubits=args.qaoa_max_qubits)
+    if 'qaoa' in solvers:
+        from solve_qubo_via_qaoa import validate_options
+        try:
+            validate_options(seed=args.seed, **qaoa_options)
+        except ValueError as error:
+            parser.error(str(error))
     baselines = args.baselines if isinstance(args.baselines, list) else \
         parse_baselines(args.baselines)
     # One generator for the whole run, so a CSV is reproducible from its
@@ -686,7 +730,7 @@ def main(argv=None):
                              args.max_exact_vars, baselines, rng,
                              sa_seed=args.seed,
                              gurobi_threads=args.gurobi_threads,
-                             qci_options=qci_options))
+                             qci_options=qci_options, qaoa_options=qaoa_options))
 
     write_csv(args.out, rows,
               provenance_lines(args, solvers, baselines, rows))

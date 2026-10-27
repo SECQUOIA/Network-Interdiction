@@ -1167,11 +1167,11 @@ def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_pen
     return bqm
 
 def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver='sa', seed=None,
-                           *, qci_options=None):
+                           *, qci_options=None, qaoa_options=None):
     """
     Build the QUBO for `di_g` at penalty coefficients (curr_λ, curr_λ+1),
     sample it with `solver` ('sa' = dwave-neal, 'qa' = D-Wave QPU,
-    'qci' = Dirac-3 binary integer mode), and
+    'qci' = Dirac-3 binary integer mode, 'qaoa' = Qiskit Aer statevector), and
     report the best solutions found.
 
     Returns a dict for all supported solver paths:
@@ -1195,18 +1195,21 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
         pre_greedy_feasible_count, pre_greedy_samples_examined, pre_greedy_samples
                                 same diagnostics for the pool passed to the
                                 interdiction greedy repair (after classical
-                                steepest descent for QA; identical to raw for SA/QCI)
+                                steepest descent for QA; identical to raw for SA/QCI/QAOA)
         sampler_info            QCI job ID, device, SDK version and rounded
-                                billable device usage; empty for SA/QA
+                                billable device usage; QAOA run metadata;
+                                empty for SA/QA
 
     Counts refer to SampleSet records, not occurrence-weighted reads or unique
     bitstrings. Feasibility here means sum(x) <= B only, not QUBO dual feasibility.
     Short SampleSets use every available record; an empty set raises ValueError.
 
-    ``seed`` is passed to simulated annealing (ignored for 'qa'/'qci').
+    ``seed`` seeds SA and QAOA (ignored for 'qa'/'qci').
     ``qci_options`` is passed to solve_bqm_qci; that path submits one hardware
     job through the separate SDK environment. Its sampler time includes worker
     startup, authentication, upload, queue and result retrieval.
+    ``qaoa_options`` configures solve_bqm_qaoa; seed also seeds its measurements.
+    Its sampler time includes circuit construction, angle optimization and shots.
     Neither time includes building the QUBO, matching Gurobi's Runtime,
     which excludes building the model.
 
@@ -1282,12 +1285,16 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
     #     subprocess.run(['julia','nip_cubic.jl',name, str(curr_λ), str(B)], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
     
-    if solver in ('sa', 'qa', 'qci'):
+    if solver in ('sa', 'qa', 'qci', 'qaoa'):
         bqm = nip_to_qubo(B, di_g, src_node, tgt_node, curr_λ, curr_λ+1)
         sample_start = time.perf_counter()
         if solver == 'qci':
             from solve_qubo_via_qci import solve_bqm_qci
             sampleset = raw_sampleset = solve_bqm_qci(bqm, **(qci_options or {}))
+        elif solver == 'qaoa':
+            from solve_qubo_via_qaoa import solve_bqm_qaoa
+            sampleset = raw_sampleset = solve_bqm_qaoa(
+                bqm, seed=0 if seed is None else seed, **(qaoa_options or {}))
         else:
             sampleset, raw_sampleset = solve_qubo_via_dwave.solve_bqm_dwave(
                 bqm, solver, seed=seed, return_raw=True)
@@ -1383,7 +1390,7 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
             'pre_greedy_feasible_count': sum(record['budget_feasible'] for record in pre_greedy_records),
             'pre_greedy_samples_examined': len(pre_greedy_records),
             'pre_greedy_samples': pre_greedy_records,
-            'sampler_info': dict(sampleset.info) if solver == 'qci' else {},
+            'sampler_info': dict(sampleset.info) if solver in ('qci', 'qaoa') else {},
         }
 
     else:
