@@ -320,12 +320,53 @@ command that produced it. On those instances annealing followed by greedy
 repair never beats plain greedy, and plain greedy reproduces the repaired
 values reported on the slides, which were produced by a version of the repair
 that ignored the annealer's sample (#12).
-[notebooks/analysis.ipynb](notebooks/analysis.ipynb)
-walks through that comparison family by family, including the check against the
-slide values and the penalty windows; the plotting helpers it calls live in
-[utils.py](utils.py) and its figures are saved to
-[figures/](figures/). It reads only the committed CSV, so it needs pandas and
-matplotlib but no Gurobi license or D-Wave token (one optional cell uses Gurobi).
+
+[notebooks/analysis.ipynb](notebooks/analysis.ipynb) is the results notebook:
+one section per method, each built from committed results only (it runs no
+solver and needs no license or token). Quality is the gap `f/f* - 1` of the
+surviving max flow `f` to the exact optimum `f*` (approximation ratio minus
+one, as in the quantum-preconditioning notebook). Its sections:
+
+1. example networks with their optimal cuts, and QUBO size against the
+   statevector, MPS and 156-qubit device limits;
+2. Gurobi, greedy, SA + repair and random start + repair on the 27 large
+   cases: a gap heat map and time against gap;
+3. QAOA on the tiny instances and the parameter-transfer cohort, scored by
+   where each state's probability goes: optimal plan, within budget, the
+   empty plan, or over budget
+   ([results/qaoa_outcomes.csv](results/qaoa_outcomes.csv), from
+   [qaoa_outcomes.py](qaoa_outcomes.py)); a separate figure shows the expected
+   best original-objective gap versus the number of independent measurements,
+   with one line per QAOA depth and a uniform-random baseline
+   ([results/qaoa_sample_quality.csv](results/qaoa_sample_quality.csv), from
+   [qaoa_sample_quality.py](qaoa_sample_quality.py));
+4. MPS QAOA at 39–149 qubits ([results/qaoa_mid.csv](results/qaoa_mid.csv));
+5. decomposition of the large cases into four pieces or 156-qubit pieces
+   ([results/decomposition_large.csv](results/decomposition_large.csv)).
+
+The figures are drawn by [results_plots.py](results_plots.py) and saved to
+[figures/](figures/). They carry no titles; the notebook text states each
+takeaway. [tests/test_analysis_notebook.py](tests/test_analysis_notebook.py)
+runs the notebook and checks every figure, and every number the text quotes,
+against the raw CSVs. QAOA is not
+scored by energy there: the budget penalty makes the empty plan a low-energy
+state, so energy scores can rise while the proposed plans get worse.
+
+The measurement-count figure uses `f/f* - 1` without repair. Over-budget
+measurements receive the empty plan's gap (`maxflow/f* - 1`); they cannot
+earn a better score by removing extra arcs. Each curve averages the exact
+expected best gap over the same six tiny cases, with equal weight per case.
+Error bars show ±1 SEM across cases (sample standard deviation divided by
+the square root of six), rather than shot noise within a circuit.
+This compares sampling quality, without accounting for training or execution
+time. Regenerate its data from the saved angles (no retraining) with:
+
+```
+python qaoa_sample_quality.py --out results/qaoa_sample_quality.csv
+```
+
+The generator refuses to overwrite an existing file. The notebook itself
+only reads the CSV and does not run a simulator.
 
 ### Regenerating the results CSV
 
