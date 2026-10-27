@@ -1,0 +1,3 @@
+# Optional fixed-angle IBM Runtime sampling and offline device snapshots.
+# Install with requirements.txt and requirements-qaoa.txt. Tested SDK API minor.
+qiskit-ibm-runtime>=0.50,<0.51

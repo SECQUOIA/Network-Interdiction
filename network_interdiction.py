@@ -1171,7 +1171,7 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
     """
     Build the QUBO for `di_g` at penalty coefficients (curr_λ, curr_λ+1),
     sample it with `solver` ('sa' = dwave-neal, 'qa' = D-Wave QPU,
-    'qci' = Dirac-3 binary integer mode, 'qaoa' = Qiskit Aer statevector), and
+    'qci' = Dirac-3 binary integer mode, 'qaoa' = Aer or IBM Runtime), and
     report the best solutions found.
 
     Returns a dict for all supported solver paths:
@@ -1209,7 +1209,10 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
     job through the separate SDK environment. Its sampler time includes worker
     startup, authentication, upload, queue and result retrieval.
     ``qaoa_options`` configures solve_bqm_qaoa; seed also seeds its measurements.
-    Its sampler time includes circuit construction, angle optimization and shots.
+    With engine='ibm', options configure qaoa_ibm.solve_bqm_ibm instead and seed
+    seeds transpilation (and local simulation), not physical measurements.
+    Sampler time includes circuit construction and shots; Aer also trains angles,
+    while IBM uses supplied fixed angles and includes submission/queue/results.
     Neither time includes building the QUBO, matching Gurobi's Runtime,
     which excludes building the model.
 
@@ -1292,9 +1295,18 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
             from solve_qubo_via_qci import solve_bqm_qci
             sampleset = raw_sampleset = solve_bqm_qci(bqm, **(qci_options or {}))
         elif solver == 'qaoa':
-            from solve_qubo_via_qaoa import solve_bqm_qaoa
-            sampleset = raw_sampleset = solve_bqm_qaoa(
-                bqm, seed=0 if seed is None else seed, **(qaoa_options or {}))
+            options = dict(qaoa_options or {})
+            engine = options.pop('engine', 'aer')
+            if engine == 'ibm':
+                from qaoa_ibm import solve_bqm_ibm
+                sampleset = raw_sampleset = solve_bqm_ibm(
+                    bqm, seed_transpiler=0 if seed is None else seed, **options)
+            elif engine == 'aer':
+                from solve_qubo_via_qaoa import solve_bqm_qaoa
+                sampleset = raw_sampleset = solve_bqm_qaoa(
+                    bqm, seed=0 if seed is None else seed, **options)
+            else:
+                raise ValueError(f'unknown QAOA engine {engine!r}')
         else:
             sampleset, raw_sampleset = solve_qubo_via_dwave.solve_bqm_dwave(
                 bqm, solver, seed=seed, return_raw=True)
