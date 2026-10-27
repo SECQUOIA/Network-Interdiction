@@ -245,8 +245,8 @@ def test_benchmark_rows_cover_every_variant(tmp_path):
     assert '# Gurobi Threads: 8; fresh run, no resumed rows' in out.read_text()
     frame = pandas.read_csv(out, comment='#')
     assert list(frame.columns) == rdb.COLUMNS
-    # 3 rules x 3 modes, plus the refine row, per budget.
-    assert len(frame) == 2 * (3 * 3 + 1)
+    # Four allocation rules x three modes, plus the refine row, per budget.
+    assert len(frame) == 2 * (4 * 3 + 1)
     for B, opt, _ in rows:
         sub = frame[frame['B'] == B]
         assert (sub['flow'] >= opt).all()
@@ -279,8 +279,8 @@ def test_benchmark_records_a_limit_nothing_fits_and_carries_on(tmp_path):
     assert list(no_fit['rule']) == ['no fit', 'no fit']
     assert list(no_fit['B']) == [1, 2] and (no_fit['pieces'] == 0).all()
     assert no_fit['flow'].isna().all()
-    # The 4-piece setting still ran: 3 rules x 3 modes per budget.
-    assert len(frame[frame['setting'] == 'pieces4']) == 2 * 9
+    # The 4-piece setting still ran: four rules x three modes per budget.
+    assert len(frame[frame['setting'] == 'pieces4']) == 2 * 12
 
 
 def test_partition_to_fit_reports_a_limit_nothing_meets():

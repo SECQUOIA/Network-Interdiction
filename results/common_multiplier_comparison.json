@@ -1,0 +1,63 @@
+{
+  "source_commit": "bfd07d1e4e39893bd18891d7491a2487fbb67b8c",
+  "command": "python run_decomposition_benchmark.py --cases results/classical_baselines_sample.csv --settings pieces4 --rules mincut,local,marginal,multiplier --modes independent,sequential,iterated --max-terminals 6 --multiplier-iterations 100 --out results/common_multiplier_comparison.csv",
+  "input_sha256": {
+    "testcases/50.planarflow": "b059aa7e99fc22aa5eaa175a35549cd4e2f8fc8b8c001d475d9a23dd5544fa7a",
+    "testcases/50_0.15.erdosflow": "2d165ecfe556609d42108b8fc7c291fa8392e45bd617a547e736b923abdcaef0",
+    "testcases/50_5.2dnnflow": "0aa659bd70e489ad0ef76af0bab5e54d994b2de962667a13a0758ccd60be2ab9",
+    "results/classical_baselines_sample.csv": "07a919ba15705b1dbe64313ba023a53c1ae827326b5e86128fa8b0f150cf42ad",
+    "results/classical_baselines_sample.json": "03c3ff8c97892d7fb267e4cfe3b4aadb046f3274e8392dfbfd1ace7c6cdd4b2b"
+  },
+  "source_sha256": {
+    "decomposition.py": "d0d750761ae1ee820c5129ac4033422ef685827ca761b9bfe56098c08881fd39",
+    "run_decomposition_benchmark.py": "2c4248bb0fac9462fed0a2dc7b89a1bcdfe5edd3eee7ab47a890a2b3482c9369",
+    "network_interdiction.py": "925129950e4d58b1547dcf93b7c3ad4f0e9f6f7916ceb127e144846a55beeaf8",
+    "run_benchmark.py": "9714f7c9472686708a8991d86202fad0e96c035c2e003ca135db52e602bcd9a0",
+    "benders.py": "eb9ea03f2c45f06ef8b2dd7cc4a08f177ae7beb0e45b098054950f96d9551718"
+  },
+  "csv_sha256": "066e1658b46015dae4b31ceb78a38a05f6381b4e373f610584792e5f7b822d40",
+  "python": "3.12.12",
+  "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "packages": {
+    "networkx": "3.7",
+    "numpy": "1.26.4",
+    "gurobipy": "13.0.3",
+    "dimod": "0.12.22",
+    "pyqubo": "1.5.0"
+  },
+  "resources": {
+    "virtual_memory_limit_gib": 8,
+    "outer_timeout_sec": 600,
+    "gurobi_threads": 8,
+    "gurobi_relative_mip_gap": 0,
+    "gurobi_absolute_mip_gap": 0,
+    "OMP_NUM_THREADS": 1,
+    "OPENBLAS_NUM_THREADS": 1,
+    "MKL_NUM_THREADS": 1,
+    "max_terminals": 6,
+    "multiplier_iterations": 100
+  },
+  "protocol": {
+    "attempts": 1,
+    "runs_per_case": 1,
+    "cases": 3,
+    "variants_per_case": 12,
+    "partition_seed": 0,
+    "partition_pieces": 4,
+    "modes": [
+      "independent",
+      "sequential",
+      "iterated"
+    ],
+    "rules": [
+      "mincut",
+      "local",
+      "marginal",
+      "multiplier"
+    ],
+    "dedicated_warmup": false,
+    "timing": "Each variant time includes allocation curve measurement and its solve/scoring. A split is measured once per rule and charged in full to each mode; partition time is separate. Add partition_sec for the full variant total; source-file loading and process/environment startup excluded. CSV times retain the existing millisecond rounding.",
+    "benders_comparison": "Read the pinned parent sample, producing commit 9c6feeaf491e17f37ba486c65042daa43bf76132. Same exact inputs/budgets, Python environment and eight Gurobi threads; Benders runtime code is unchanged. Its separate-process single timings have a different execution order/warmup history, so no statistical speedup inference is made.",
+    "scope": "Three easy existing slide cases, not the full 27-case cohort or real networks. No hardware; largest piece sizes are logical QUBO counts and not physical embedding/circuit-fitting evidence. Surrogate bounds are only for additive budget allocation, not global NIP."
+  }
+}
