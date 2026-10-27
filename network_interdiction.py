@@ -1166,13 +1166,15 @@ def nip_to_qubo(B, di_g, src_node, tgt_node, cardinality_penalty_coeff, dual_pen
     bqm = model.to_bqm()
     return bqm
 
-def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver='sa', seed=None):
+def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver='sa', seed=None,
+                           *, qci_options=None):
     """
     Build the QUBO for `di_g` at penalty coefficients (curr_λ, curr_λ+1),
-    sample it with `solver` ('sa' = dwave-neal, 'qa' = D-Wave QPU), and
+    sample it with `solver` ('sa' = dwave-neal, 'qa' = D-Wave QPU,
+    'qci' = Dirac-3 binary integer mode), and
     report the best solutions found.
 
-    Returns a dict for the 'sa'/'qa' paths (None for any other solver):
+    Returns a dict for all supported solver paths:
 
         best_energy             lowest QUBO energy in the sampleset
         best_obj_before_greedy  lowest max-flow objective among the 20
@@ -1193,13 +1195,18 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
         pre_greedy_feasible_count, pre_greedy_samples_examined, pre_greedy_samples
                                 same diagnostics for the pool passed to the
                                 interdiction greedy repair (after classical
-                                steepest descent for QA; identical to raw for SA)
+                                steepest descent for QA; identical to raw for SA/QCI)
+        sampler_info            QCI job ID, device, SDK version and rounded
+                                billable device usage; empty for SA/QA
 
     Counts refer to SampleSet records, not occurrence-weighted reads or unique
     bitstrings. Feasibility here means sum(x) <= B only, not QUBO dual feasibility.
     Short SampleSets use every available record; an empty set raises ValueError.
 
-    ``seed`` is passed to the simulated-annealing sampler (ignored for 'qa').
+    ``seed`` is passed to simulated annealing (ignored for 'qa'/'qci').
+    ``qci_options`` is passed to solve_bqm_qci; that path submits one hardware
+    job through the separate SDK environment. Its sampler time includes worker
+    startup, authentication, upload, queue and result retrieval.
     Neither time includes building the QUBO, matching Gurobi's Runtime,
     which excludes building the model.
 
@@ -1275,11 +1282,15 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
     #     subprocess.run(['julia','nip_cubic.jl',name, str(curr_λ), str(B)], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
     
-    if solver == 'sa' or solver == 'qa':
+    if solver in ('sa', 'qa', 'qci'):
         bqm = nip_to_qubo(B, di_g, src_node, tgt_node, curr_λ, curr_λ+1)
         sample_start = time.perf_counter()
-        sampleset, raw_sampleset = solve_qubo_via_dwave.solve_bqm_dwave(
-            bqm, solver, seed=seed, return_raw=True)
+        if solver == 'qci':
+            from solve_qubo_via_qci import solve_bqm_qci
+            sampleset = raw_sampleset = solve_bqm_qci(bqm, **(qci_options or {}))
+        else:
+            sampleset, raw_sampleset = solve_qubo_via_dwave.solve_bqm_dwave(
+                bqm, solver, seed=seed, return_raw=True)
         sample_time_sec = time.perf_counter() - sample_start
         postprocess_start = time.perf_counter()
         def select_records(sample_set):
@@ -1372,14 +1383,8 @@ def qubo_verify_parameters(name, di_g, curr_λ, src_node, tgt_node, B=2, solver=
             'pre_greedy_feasible_count': sum(record['budget_feasible'] for record in pre_greedy_records),
             'pre_greedy_samples_examined': len(pre_greedy_records),
             'pre_greedy_samples': pre_greedy_records,
+            'sampler_info': dict(sampleset.info) if solver == 'qci' else {},
         }
-
-    elif solver == 'qci':
-        # NOTE: solve_qubo_via_qci is not imported anywhere in this module
-        # -- this branch will raise NameError if ever reached. Flagged, not
-        # fixed here (out of scope for issue #7/#8); 'sa' is the only
-        # solver path main() actually exercises.
-        curr_best_sample = solve_qubo_via_qci.solver_qubo_dirac1(f"./qubos/{name}_{curr_λ}.qubo", di_g)
 
     else:
         print(f"Unsupported solver: {solver}")

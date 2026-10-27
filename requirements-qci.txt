@@ -1,0 +1,4 @@
+# Install alone in .venv-qci, NOT together with requirements.txt.
+# This SDK requires networkx<3; the core project requires networkx>=3.2.
+# qci_worker.py exchanges JSON with the core environment to isolate that conflict.
+qci-client==5.0.3
