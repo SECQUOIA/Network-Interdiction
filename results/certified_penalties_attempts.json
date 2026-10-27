@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "max_solver_seconds_per_case_solve": 20,
+  "outer_seconds_per_attempt": 300,
+  "memory_limit_gib": 8,
+  "attempts": [
+    {
+      "attempt": 1,
+      "producer_commit": "40f0ce10861c99e460cfe97076be980ed39219fd",
+      "outcome": "export_failed",
+      "completed_case_solves": 2,
+      "completed_case": "testcases/tiny_a.flow:1",
+      "error": "TypeError: Object of type int64 is not JSON serializable",
+      "retained_log_sha256": "25e43164c9df7bed990df4e09837b97f482197592e7647dd208a3cfc0ae308de",
+      "note": "Both solve audits completed, but JSON serialization failed before any result file was written; those unretained timings are excluded."
+    },
+    {
+      "attempt": 2,
+      "producer_commit": "1ac55133ec7dcd14d70b79d94a824221efd33bed",
+      "outcome": "completed",
+      "completed_case_solves": 20,
+      "result_file": "certified_penalties.json",
+      "result_sha256": "53822e2c8d02ba016de01e76bd7c32a5c519193f590a1bb6469afc9ebd7bd4e1",
+      "retained_log_sha256": "49d3054a9fa9580f23eb86fc71bbe394706e702fbfaeed5cc20cd78e06e62401"
+    }
+  ]
+}

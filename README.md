@@ -388,3 +388,15 @@ curve). Neither case guarantees exactly B cuts, so the row keeps the exact
 optimum and the baselines but no QUBO or solver columns. With a hand-picked
 number instead, `run_benchmark.py` still checks that the exact QUBO optimum
 decodes to an optimal interdiction and refuses to write the row otherwise.
+
+### Certified squared penalties and Lean proofs
+
+The linear model remains the default. `certified_squared_qubo()` in
+[`certified_penalties.py`](certified_penalties.py) offers an explicit alternative:
+λ=β=1+sum(capacities) guarantees exact-budget feasibility for integer-capacity
+instances, including budgets with an empty linear window. It adds all pairwise
+interdiction couplings, so it trades sparse structure for an unconditional
+sufficient encoding. The [derivation and machine-checked Lean project](proofs/README.md)
+cover dual repair, the strict linear window and exposed-support characterization,
+and simultaneous squared-budget/dual separation. The helper validates the
+integer arithmetic range; arbitrary hand-chosen coefficients carry no certificate.
