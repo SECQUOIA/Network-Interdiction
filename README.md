@@ -647,3 +647,13 @@ curve). Neither case guarantees exactly B cuts, so the row keeps the exact
 optimum and the baselines but no QUBO or solver columns. With a hand-picked
 number instead, `run_benchmark.py` still checks that the exact QUBO optimum
 decodes to an optimal interdiction and refuses to write the row otherwise.
+
+### Budget-preserving XY mixer
+
+The Aer backend also supports a fixed-Hamming-weight XY mixer on the x
+register, with either a feasible basis state or a bounded dense Dicke start.
+The other variables keep X mixing and a cut-link penalty. See the
+[formulation, API, resource guards and comparison protocol](docs/qaoa_xy.md).
+`run_xy_comparison.py` compares it with penalty QAOA and SA using the same
+original MILP references and shot/repair scorer. This is a simulator feature;
+IBM Runtime remains on the existing penalty ansatz.
