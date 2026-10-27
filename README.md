@@ -594,3 +594,10 @@ curve). Neither case guarantees exactly B cuts, so the row keeps the exact
 optimum and the baselines but no QUBO or solver columns. With a hand-picked
 number instead, `run_benchmark.py` still checks that the exact QUBO optimum
 decodes to an optimal interdiction and refuses to write the row otherwise.
+
+### Real networks and bounded difficulty profiling
+
+See [the challenge cohort](testcases/challenge/README.md) for road, contact, power,
+and internal-arc covering inputs, and [the matched MILP/Benders screen](docs/challenge_profile.md)
+for bounded runs, gap trajectories, and explicit hard-set criteria. Third-party
+data retain the terms documented with each source.

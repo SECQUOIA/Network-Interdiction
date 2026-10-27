@@ -40,9 +40,10 @@ def flow_cut(graph, source, sink, interdicted_edges=()):
 
 
 def solve(graph, source, sink, budget, *, time_limit=60.0,
-          max_iterations=1000, record_cuts=False):
+          max_iterations=1000, record_cuts=False, interdictable=None):
     """Return a feasible cut, lower bound, history and honest stopping status.
 
+    ``interdictable`` restricts removable arcs, as in the monolithic model.
     One wall-clock allowance covers construction, every master solve and
     max-flow subproblem. NetworkX calls are cooperative: a call in progress
     can overrun the deadline, after which no further master is dispatched.
@@ -65,6 +66,12 @@ def solve(graph, source, sink, budget, *, time_limit=60.0,
     if sum(map(int, capacities)) > 2**53:
         raise ValueError('total capacity exceeds the exact integer export range')
 
+    allowed = set(graph.edges()) if interdictable is None else set(interdictable)
+    if allowed - set(graph.edges()):
+        raise ValueError('interdictable arcs must belong to the graph')
+    if budget > len(allowed):
+        raise ValueError('budget exceeds the number of interdictable arcs')
+
     start = time.perf_counter()
     deadline = start + time_limit
     upper, initial = flow_cut(graph, source, sink)
@@ -74,6 +81,7 @@ def solve(graph, source, sink, budget, *, time_limit=60.0,
     cut_count = 0
     master_calls = 0
     master_time = 0.0
+    node_count = 0.0
     subproblem_time = time.perf_counter() - start
     status = 'iteration_limit'
 
@@ -82,7 +90,7 @@ def solve(graph, source, sink, budget, *, time_limit=60.0,
                 'lower_bound': lower, 'status': status,
                 'iterations': master_calls, 'cut_count': cut_count,
                 'runtime_sec': time.perf_counter() - start,
-                'master_time_sec': master_time,
+                'master_time_sec': master_time, 'node_count': node_count,
                 'subproblem_time_sec': subproblem_time,
                 'history': history, 'cuts': cut_records}
 
@@ -96,9 +104,13 @@ def solve(graph, source, sink, budget, *, time_limit=60.0,
     edges = sorted(graph.edges())
     with ni._gurobi_model() as model:
         # Each master is solved to zero requested MIP gap when time permits.
+        model.Params.Seed = 0
         model.Params.MIPGap = 0
         model.Params.MIPGapAbs = 0
         x = model.addVars(edges, vtype=gp.GRB.BINARY, name='x')
+        for edge in edges:
+            if edge not in allowed:
+                x[edge].UB = 0
         eta = model.addVar(lb=0, name='surviving_flow')
         model.addConstr(gp.quicksum(x[e] for e in edges) <= budget)
         model.setObjective(eta, gp.GRB.MINIMIZE)
@@ -123,6 +135,7 @@ def solve(graph, source, sink, budget, *, time_limit=60.0,
             master_calls += 1
             model.optimize()
             master_time += time.perf_counter() - before
+            node_count += float(model.NodeCount)
             if model.Status not in (gp.GRB.OPTIMAL, gp.GRB.TIME_LIMIT,
                                      gp.GRB.INTERRUPTED):
                 raise RuntimeError(f'Benders master failed: status {model.Status}')
@@ -149,7 +162,7 @@ def solve(graph, source, sink, budget, *, time_limit=60.0,
             history.append({'iteration': iteration, 'lower_bound': lower,
                             'flow': value, 'best_flow': upper,
                             'time_sec': time.perf_counter() - start,
-                            'master_status': model.Status})
+                            'master_status': model.Status, 'master_nodes': float(model.NodeCount)})
             if upper - lower <= 1e-7:
                 status = 'optimal'
                 break
