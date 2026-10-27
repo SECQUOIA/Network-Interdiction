@@ -312,6 +312,33 @@ writes `sample_results_sa_flow_reduction.pdf` and
 `QA_*` columns are empty, and a solver whose columns are empty is skipped
 rather than drawn as empty bars.
 
+New benchmark CSVs record `SA_raw_feasible_count` and
+`QA_raw_feasible_count`: the number of budget-feasible records among the
+20 lowest-energy sampler records, or all records when fewer are returned.
+`SA_raw_samples_examined` and `QA_raw_samples_examined` give the denominator.
+Feasible means the decoded interdiction uses **at most B arcs**; this does
+not assert feasibility of the QUBO's dual variables. A measured count of
+zero is written as `0`; an unrun pass or an empty strict lambda window leaves
+the diagnostics empty. A sampler returning no records raises a clear error.
+
+Counts use **SampleSet records**, matching the best-20 selection used by
+the repair, rather than weighting by `num_occurrences` or deduplicating
+bitstrings. `SA_raw_samples` / `QA_raw_samples` retain JSON records with
+rank, energy, occurrence count, interdicted arcs, surviving max flow and
+budget feasibility. This lets the count and each cut's flow be audited.
+Tied energies retain the sampler's record order.
+
+For QA, “raw” means the logical samples returned by `EmbeddingComposite`
+after unembedding and its chain-break handling, **before** the adapter's
+classical steepest descent. The adapter continues to apply that descent
+before the existing flow/energy and greedy-repair metrics. Therefore the
+`QA_pre_greedy_feasible_count`, `QA_pre_greedy_samples_examined` and
+`QA_pre_greedy_samples` columns separately describe the actual repair input
+pool, which can differ from raw QPU output. The equivalent `SA_pre_greedy_*`
+columns equal the raw SA diagnostics because SA has no descent stage.
+The legacy `QA_NIP(advantage1)` and `QA_QUBO(advantage1)` columns still measure
+the post-descent pool; they must not be relabeled as raw QPU measurements.
+
 [results/slide_instances_sa.csv](results/slide_instances_sa.csv) is the
 same comparison on the nine instances behind the D-Wave slides (the original
 D-Wave results were not stored), with Gurobi's optimum, simulated annealing,
@@ -326,6 +353,28 @@ slide values and the penalty windows; the plotting helpers it calls live in
 [utils.py](utils.py) and its figures are saved to
 [figures/](figures/). It reads only the committed CSV, so it needs pandas and
 matplotlib but no Gurobi license or D-Wave token (one optional cell uses Gurobi).
+Those historical CSVs predate the count columns and have no retained sample
+records from which to recover them. They remain unchanged. The original QA
+CSVs are still missing under #18; adding this instrumentation does not recover
+those runs, and no hardware rerun was performed.
+
+[results/raw_feasibility_sa.csv](results/raw_feasibility_sa.csv) is a fresh,
+single-seed SA sample on three of those existing cases, with the selected
+records retained. Its [manifest](results/raw_feasibility_sa.json) pins the
+producing source, input hashes, versions, command and resource limits.
+
+| Instance (budget) | Raw budget-feasible / examined | Best feasible raw flow | Flow after repair |
+| --- | ---: | ---: | ---: |
+| `50.planarflow` (5) | 20 / 20 | 311 | 311 |
+| `50_0.15.erdosflow` (5) | 20 / 20 | 393 | 393 |
+| `50_5.2dnnflow` (4) | 0 / 20 | unavailable | 326 |
+
+The last case illustrates why a count is useful: none of the selected raw
+records respects the budget, even though repair produces a feasible result.
+These three single runs validate the instrumentation; they do not establish
+a size trend or reproduce the historical D-Wave experiments. All QA columns
+remain empty. Audits independently recompute all 60 saved cuts' flows and
+budget-feasibility flags.
 
 ### Regenerating the results CSV
 

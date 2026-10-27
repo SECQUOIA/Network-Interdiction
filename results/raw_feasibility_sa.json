@@ -1,0 +1,45 @@
+{
+  "source_commit": "8587ae939e40dc3a6f55e1386ba1ef0ceba932d8",
+  "command": "python run_benchmark.py --exact gurobi --solvers sa --baselines greedy --case testcases/50.planarflow:5:auto --case testcases/50_0.15.erdosflow:5:auto --case testcases/50_5.2dnnflow:4:auto --out results/raw_feasibility_sa.csv",
+  "input_sha256": {
+    "testcases/50.planarflow": "b059aa7e99fc22aa5eaa175a35549cd4e2f8fc8b8c001d475d9a23dd5544fa7a",
+    "testcases/50_0.15.erdosflow": "2d165ecfe556609d42108b8fc7c291fa8392e45bd617a547e736b923abdcaef0",
+    "testcases/50_5.2dnnflow": "0aa659bd70e489ad0ef76af0bab5e54d994b2de962667a13a0758ccd60be2ab9"
+  },
+  "source_sha256": {
+    "network_interdiction.py": "28c987ce9783363fd209b7770f034cffdb4d6a7c0a940a6118cd9a88fcd6e1b2",
+    "run_benchmark.py": "746bc4751b714731af7f6715f965cc0974c85f95d43baf0062eb2e100b332a37",
+    "solve_qubo_via_dwave.py": "bc8829130497a6feee9a02c9c58013817b7e57d754cc611e8e427a269e9cdcb4"
+  },
+  "csv_sha256": "5da71e7a540d1b4714dae12de7e433e3a4901f195c2b36f67763255d4d1eae83",
+  "python": "3.12.12",
+  "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "packages": {
+    "networkx": "3.7",
+    "numpy": "1.26.4",
+    "gurobipy": "13.0.3",
+    "dimod": "0.12.22",
+    "dwave-samplers": "1.8.0",
+    "dwave-neal": "0.6.0",
+    "dwave-system": "1.34.0",
+    "pyqubo": "1.5.0"
+  },
+  "resources": {
+    "virtual_memory_limit_gib": 8,
+    "outer_timeout_sec": 600,
+    "gurobi_threads": 8,
+    "OMP_NUM_THREADS": 1,
+    "OPENBLAS_NUM_THREADS": 1,
+    "MKL_NUM_THREADS": 1
+  },
+  "protocol": {
+    "attempts": 1,
+    "runs_per_case": 1,
+    "sa_seed": 0,
+    "num_reads": 2500,
+    "num_sweeps": 1000,
+    "sweeps_note": "Installed sampler default; caller does not override.",
+    "selection": "At most 20 lowest-energy SampleSet records, stable ties. Counts are unweighted records, not physical occurrences. SA raw and pre-greedy pools coincide.",
+    "scope": "Three small existing slide cases with fresh SA data, no QA/hardware pass and no inference about original hardware experiments. Historical CSVs unchanged; no scaling or statistical performance claim."
+  }
+}
