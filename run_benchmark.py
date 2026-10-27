@@ -76,6 +76,16 @@ pass that does not beat these on an instance contributed nothing measurable
 there. Both need no credentials. `random` is seeded (--seed) so a CSV is
 reproducible.
 
+Opt-in `lp` solves the continuous relaxation, rounds x >= 0.5, and applies
+the same repair. `lagrangian` runs the existing binary Gurobi multiplier
+search and retains its iteration bounds. LP_lower_bound and
+Lagrangian_lower_bound are lower bounds on surviving flow; Lower_bound is
+their maximum. Every available feasible result F gets an optional *_gap
+column (F-Lower_bound)/F (zero flow has gap zero). Missing results stay
+empty. LP_Round_Repair and Lagrangian_Feasible are feasible flows, not
+bounds. The LP and Lagrangian times include construction; LP repair is
+timed separately. See README for the formulations and numerical contracts.
+
 Choosing lambda (`auto`)
 ------------------------
 The budget term in nip_to_qubo() is linear, lambda * (sum(x) - B), so the
@@ -125,6 +135,7 @@ import networkx as nx
 import numpy as np
 
 import network_interdiction as ni
+import classical_baselines as cb
 
 # Every column network_interdiction_plot.py reads, in the order it reads them.
 PLOT_COLUMNS = [
@@ -153,15 +164,23 @@ SOLVER_COLUMNS = {
 BASELINE_COLUMNS = {
     'greedy': 'Greedy',
     'random': 'Random_Greedy',
+    'lp': 'LP_Round_Repair',
+    'lagrangian': 'Lagrangian_Feasible',
 }
 
 # Wall time per method, and Gurobi's incumbent trajectory (last: it is long).
 TIME_COLUMNS = ['Gurobi_time_sec', 'SA_time_sec', 'SA_repair_time_sec',
-                'Greedy_time_sec', 'Random_Greedy_time_sec']
+                'Greedy_time_sec', 'Random_Greedy_time_sec', 'LP_time_sec',
+                'LP_repair_time_sec', 'Lagrangian_time_sec']
 TRAJECTORY_COLUMN = 'Gurobi_trajectory'
+FLOW_COLUMNS = [col for cols in SOLVER_COLUMNS.values() for col in cols[:2]] \
+    + list(BASELINE_COLUMNS.values())
+BOUND_COLUMNS = ['LP_lower_bound', 'LP_objective', 'Lagrangian_lower_bound',
+                 'Lower_bound', 'Lagrangian_iterations'] \
+    + [col + '_gap' for col in FLOW_COLUMNS]
 
 CSV_COLUMNS = CSV_COLUMNS[:-1] + list(BASELINE_COLUMNS.values()) + \
-    CSV_COLUMNS[-1:] + TIME_COLUMNS + [TRAJECTORY_COLUMN]
+    CSV_COLUMNS[-1:] + TIME_COLUMNS + BOUND_COLUMNS + [TRAJECTORY_COLUMN]
 
 DEFAULT_MAX_EXACT_VARS = 24
 
@@ -451,6 +470,31 @@ def run_case(instance, B, curr_λ, exact_backend, solvers,
             rng if rng is not None else np.random.default_rng())
         row['Random_Greedy_time_sec'] = time.perf_counter() - start
 
+    bounds = []
+    if 'lp' in baselines:
+        result = cb.lp_round_repair(di_g, src_node, tgt_node, B)
+        row.update({'LP_Round_Repair': result['flow'],
+                    'LP_lower_bound': result['lower_bound'],
+                    'LP_objective': result['lp_objective'],
+                    'LP_time_sec': result['lp_time_sec'],
+                    'LP_repair_time_sec': result['repair_time_sec']})
+        bounds.append(result['lower_bound'])
+    if 'lagrangian' in baselines:
+        start = time.perf_counter()
+        result = ni.solve_nip_gurobi_relaxation(
+            di_g, src_node, tgt_node, B, 0, row['maxflow'])
+        row.update({'Lagrangian_lower_bound': result['lower_bound'],
+                    'Lagrangian_Feasible': (result['feasible_flow']
+                                           if result['feasible_flow'] is not None else ''),
+                    'Lagrangian_iterations': json.dumps(result['iterations']),
+                    'Lagrangian_time_sec': time.perf_counter() - start})
+        bounds.append(result['lower_bound'])
+    if bounds:
+        row['Lower_bound'] = max(bounds)
+        for column in FLOW_COLUMNS:
+            if row[column] != '':
+                row[column + '_gap'] = cb.relative_gap(row[column], row['Lower_bound'])
+
     return row
 
 
@@ -490,7 +534,8 @@ def parse_baselines(spec):
     for baseline in baselines:
         if baseline not in BASELINE_COLUMNS:
             raise argparse.ArgumentTypeError(
-                f"unknown baseline {baseline!r}, expected greedy and/or random")
+                f"unknown baseline {baseline!r}, expected one of "
+                f"{', '.join(BASELINE_COLUMNS)}")
     return baselines
 
 
@@ -536,6 +581,17 @@ def provenance_lines(args, solvers, baselines, rows=()):
         lines.append(f"simulated annealing seed: {args.seed}")
     if args.exact == 'gurobi':
         lines.append(f"Gurobi trajectory solve threads: {args.gurobi_threads}")
+    if 'lp' in baselines:
+        import scipy
+        lines.append(f"LP: scipy {scipy.__version__}, HiGHS continuous relaxation; "
+                     "round x >= 0.5 then greedy repair; exact-rational dual bound")
+    if 'lagrangian' in baselines:
+        lines.append(f"Lagrangian: binary Gurobi solves, "
+                     f"{ni.DEFAULT_GUROBI_THREADS} threads, lambda interval [0,maxflow]; "
+                     "best global solver bound, subject to solver tolerances")
+    if 'lp' in baselines or 'lagrangian' in baselines:
+        lines.append("*_gap = (feasible surviving flow - Lower_bound) / feasible "
+                     "surviving flow; zero flow has gap 0; unrun/infeasible results are empty")
     if any(case[2] == 'auto' for case in args.cases):
         lines.append(
             "lambda = auto: the midpoint of the exact window "
@@ -584,8 +640,9 @@ def main(argv=None):
              '(default: sa)')
     parser.add_argument(
         '--baselines', type=parse_baselines, default='greedy,random',
-        metavar='greedy[,random]',
-        help="classical baselines to run: 'greedy', 'random', both, or "
+        metavar='greedy,random,lp,lagrangian',
+        help="comma-separated classical baselines: greedy, random, lp, "
+             "lagrangian (needs Gurobi), or "
              "'none' (default: greedy,random)")
     parser.add_argument(
         '--seed', type=int, default=0,

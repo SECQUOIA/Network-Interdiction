@@ -69,7 +69,7 @@ def test_final_point_is_the_true_flow_of_the_returned_cuts():
 def test_run_case_records_times_and_a_consistent_trajectory():
     require_gurobi()
     row = rb.run_case(tiny('tiny_b'), 2, 'auto', 'gurobi', solvers=['sa'],
-                      baselines=['greedy', 'random'], sa_seed=0)
+                      baselines=['greedy', 'random', 'lp', 'lagrangian'], sa_seed=0)
     for column in rb.TIME_COLUMNS:
         assert isinstance(row[column], float) and row[column] >= 0, column
     trajectory = json.loads(row[rb.TRAJECTORY_COLUMN])
@@ -82,6 +82,8 @@ def test_brute_backend_leaves_the_gurobi_columns_empty():
     assert row['Gurobi_time_sec'] == ''
     assert row[rb.TRAJECTORY_COLUMN] == ''
     assert row['Greedy_time_sec'] >= 0
+    for column in ('LP_time_sec', 'LP_repair_time_sec', 'Lagrangian_time_sec'):
+        assert row[column] == ''
 
 
 def test_simulated_annealing_is_reproducible_from_its_seed():

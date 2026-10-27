@@ -359,6 +359,57 @@ instance contributed nothing measurable there. Both are free to compute;
 checked-in sample both baselines already reach the optimum on every row, so
 the sample shows the format rather than separating SA from greedy.
 
+Two additional baselines are opt-in:
+
+```bash
+python run_benchmark.py --exact brute --solvers sa --baselines greedy,random,lp \
+    --case testcases/tiny_a.flow:1:auto --out /tmp/lp_comparison.csv
+```
+
+`lp` solves a **continuous LP relaxation** with SciPy/HiGHS, rounds each
+interdiction variable at 0.5, and applies the same greedy budget repair used
+for annealer samples. `LP_Round_Repair` is the surviving flow of that feasible
+cut; `LP_lower_bound` is a lower bound, not a feasible solution. Both are in
+flow-capacity units. `LP_time_sec` includes LP construction, solve and bound
+verification; `LP_repair_time_sec` includes rounding, repair and final scoring.
+The plot draws the feasible result alongside the other baselines. Historical
+CSVs without these optional columns remain supported.
+
+The LP minimizes `sum(c_e*z_e)` subject to `pi_u-pi_v <= x_e+z_e`,
+`sum(x_e) <= B`, `pi_s=1`, `pi_t=0`, with every variable in `[0,1]`.
+This is the projection of the McCormick linearization of the binary
+min-cut/interdiction model. Relaxing integrality gives a lower bound; its
+integrality gap can be large, as shown by
+[Altner, Ergun and Uhan (2010)](https://doi.org/10.1016/j.orl.2009.09.013).
+No approximation guarantee is claimed for rounding and repair.
+
+The bound is independently reconstructed from HiGHS' inequality marginals.
+For `A*v <= b`, box bounds `l <= v <= u`, and any `y <= 0`,
+`b*y + min_{l<=v<=u} (c-A.T*y)*v` is a lower bound. We project the returned
+duals to that sign, evaluate the expression using exact rational arithmetic
+on the input numbers, and round the final float downward. Thus a numerical
+dual-stationarity residual cannot silently turn an LP objective into an
+invalid bound. `LP_objective` separately records the solver's primal value.
+
+`--baselines lp,lagrangian` also runs the existing **binary Lagrangian**
+search, requiring Gurobi. This is different from the LP relaxation: it
+removes the budget constraint and adds `lambda*(sum(x)-B)` to the objective.
+The search returns each iteration's multiplier, global solver lower bound,
+objective, cut count and surviving flow in `Lagrangian_iterations` (JSON).
+`Lagrangian_lower_bound` retains the best bound, subject to Gurobi's numerical
+tolerances; `Lagrangian_Feasible` retains only budget-feasible incumbents and
+is empty if none was found. The search uses eight threads and at most 100
+iterations; midpoint selection need not maximize the Lagrangian bound.
+`Lagrangian_time_sec` includes model construction and all iterations.
+
+When either bound pass runs, `Lower_bound` is the largest available lower
+bound. Each available feasible SA, QA or baseline result `F` gets a `_gap`
+column `(F-Lower_bound)/F`, an upper bound on relative suboptimality for this
+minimization problem. Zero flow has gap zero; unrun or infeasible results
+remain empty. These are gaps in **surviving flow**, not the flow-reduction
+ratios plotted elsewhere. Benders and the complete per-family comparison
+remain separate work under #15.
+
 A real run needs the licensed tools:
 
 ```

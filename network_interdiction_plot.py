@@ -44,6 +44,8 @@ SOLVERS = {
 BASELINES = {
     'Greedy': 'Greedy',
     'Random-Greedy': 'Random_Greedy',
+    'LP-Round-Repair': 'LP_Round_Repair',
+    'Lagrangian-Feasible': 'Lagrangian_Feasible',
 }
 
 # Plotting order, and the colour each series has always been drawn in.
@@ -57,6 +59,8 @@ SERIES_COLORS = {
     'SA-Greedy': '#ff3b30',
     'Greedy': '#2c2f33',
     'Random-Greedy': '#ffcc00',
+    'LP-Round-Repair': '#8e44ad',
+    'Lagrangian-Feasible': '#16a085',
 }
 
 BAR_WIDTH = 0.25
@@ -152,8 +156,9 @@ def compute_series(frame, solvers, baselines=()):
 
 
 def grouped_bar_positions(num_groups, num_series):
-    """Left edges of each series' bars, plus the group centres for the ticks."""
-    base = np.arange(num_groups) * GROUP_STEP
+    """Bar centres and tick positions, with room for every optional series."""
+    group_step = max(GROUP_STEP, BAR_WIDTH * (num_series + 1))
+    base = np.arange(num_groups) * group_step
     positions = [base + i * BAR_WIDTH for i in range(num_series)]
     centres = base + BAR_WIDTH * (num_series - 1) / 2
     return positions, centres
@@ -178,7 +183,7 @@ def draw(series, x_labels, ylabel, ylim, out_path, reference_line=None):
     plt.xlabel('#Variables (#Interdicted Edges)', fontsize=20)
     plt.ylabel(ylabel, fontsize=20)
     plt.xticks(centres, x_labels, rotation=45)
-    plt.legend(prop={'size': 12}, loc='upper left', ncol=len(series),
+    plt.legend(prop={'size': 12}, loc='upper left', ncol=min(4, len(series)),
                fancybox=False, shadow=True)
     plt.tight_layout()
     plt.ylim(ylim)
