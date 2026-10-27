@@ -407,8 +407,88 @@ bound. Each available feasible SA, QA or baseline result `F` gets a `_gap`
 column `(F-Lower_bound)/F`, an upper bound on relative suboptimality for this
 minimization problem. Zero flow has gap zero; unrun or infeasible results
 remain empty. These are gaps in **surviving flow**, not the flow-reduction
-ratios plotted elsewhere. Benders and the complete per-family comparison
-remain separate work under #15.
+ratios plotted elsewhere.
+
+`--baselines greedy,random,lp,lagrangian,benders` adds a **Benders baseline**
+with a binary interdiction master solved by Gurobi and max-flow subproblems
+solved by NetworkX. It accepts the nonnegative integer capacities used in
+`.flow` files. `Benders` is the best feasible surviving flow,
+`Benders_lower_bound` is the master lower bound, and `Benders_status` is
+`optimal`, `time_limit`, `iteration_limit` or `interrupted`. A limited run
+still returns its feasible incumbent and available lower bound; it does
+not become an exact reference. The bound also contributes to `Lower_bound`
+and the `_gap` columns. Unrun Benders columns remain empty.
+
+```bash
+python run_benchmark.py --exact brute --solvers sa \
+    --baselines greedy,lp,benders --benders-time-limit 60 \
+    --benders-max-iterations 1000 --case testcases/tiny_a.flow:1:auto \
+    --out /tmp/benders_comparison.csv
+```
+
+The master minimizes `eta` over binary `x`, with `sum(x) <= B` and
+`eta >= 0`. For any feasible original-network flow `f` of value `v`, add
+`eta >= v - sum(f_e*x_e)`. To see validity, take any source–sink cut: its
+surviving capacity is at least its surviving forward flow, which is at
+least `v - sum(f_e*x_e)` because backward flow is nonnegative and the sum
+subtracts removed flow over *all* arcs. The min-cut theorem gives the bound
+on surviving max flow. A maximum flow after the current interdiction has
+zero flow on removed arcs, making its inequality tight at that interdiction.
+Thus exact master solves and complete cut generation converge over the
+finite binary set. This argument is specific to maximum-flow interdiction;
+[Israeli and Wood (2002)](https://doi.org/10.1002/net.10039) treats
+shortest-path interdiction, and this implementation does not reproduce its
+algorithm or supervalid inequalities.
+
+`Benders_iterations` counts master solves; `Benders_history` records each
+completed candidate's bounds, feasible flows, elapsed time and master status.
+`Benders_interdicted_edges` records the final feasible cut as JSON so its
+surviving flow can be independently recomputed.
+`Benders_time_sec` includes model construction, all master solves and all
+max-flow subproblems. Masters use eight threads and zero requested MIP gap;
+their bounds and stopping comparisons remain subject to Gurobi's numerical
+tolerances. The default limits are 60 seconds and 1000 master solves per
+pass. The wall limit is cooperative: a NetworkX max-flow call in progress
+may overrun it, after which no further solve starts. Exact reference and
+other baseline passes have their own timing and are outside that allowance.
+For timing comparisons, `Gurobi_total_time_sec` includes the monolithic
+trajectory model's construction, solve and final flow scoring;
+`SA_total_time_sec` includes QUBO construction, sampling and postprocessing.
+The existing `Gurobi_time_sec` remains solver-only for compatibility.
+`Reference_time_sec` separately records exact reference/QUBO verification
+and any auto-lambda calibration; do not treat this setup work as free when
+reporting the complete QUBO pipeline cost. These columns exclude graph-file
+loading, and the total solve times include their usual diagnostic output.
+The complete same-instance per-family comparison remains work under #15.
+
+The saved [three-family sample](results/classical_baselines_sample.csv)
+runs these methods on the same three existing slide cases, using the
+command and environment recorded in its
+[manifest](results/classical_baselines_sample.json). Surviving flow is
+minimized; all three Benders runs closed their bound gaps.
+
+| Instance (budget) | Exact | SA + repair | Greedy | LP + repair | Benders [lower, upper] | Master solves |
+| --- | ---: | ---: | ---: | ---: | --- | ---: |
+| `50.planarflow` (5) | 276 | 311 | 276 | 276 | [276, 276] | 9 |
+| `50_0.15.erdosflow` (5) | 358 | 393 | 358 | 358 | [358, 358] | 6 |
+| `50_5.2dnnflow` (4) | 165 | 326 | 165 | 165 | [165, 165] | 9 |
+
+One-run elapsed seconds, rounded here only for readability:
+
+| Instance | Gurobi total | SA total | Greedy | LP + repair | Benders total | Reference/calibration |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `50.planarflow` | 0.022 | 24.338 | 2.482 | 0.016 | 0.111 | 0.312 |
+| `50_0.15.erdosflow` | 0.028 | 28.116 | 3.296 | 0.015 | 0.049 | 0.376 |
+| `50_5.2dnnflow` | 0.027 | 31.562 | 2.281 | 0.017 | 0.075 | 0.311 |
+
+The sample uses eight Gurobi threads, one thread for the listed numerical
+libraries, and SA seed 0 with 2500 reads and the installed sampler's 1000
+sweeps default. There is one run per case and no dedicated warmup; references
+run first in the same process. These easy cases also have exact LP bounds
+and optimal greedy solutions. They validate execution and saved-cut scoring,
+not hardness, statistical timing differences, scaling or a speedup.
+The CSV leaves hardware and other unrun methods empty. Decomposition and
+the remaining same-instance baselines are still needed for #15's full table.
 
 A real run needs the licensed tools:
 

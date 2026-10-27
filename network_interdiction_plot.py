@@ -46,6 +46,7 @@ BASELINES = {
     'Random-Greedy': 'Random_Greedy',
     'LP-Round-Repair': 'LP_Round_Repair',
     'Lagrangian-Feasible': 'Lagrangian_Feasible',
+    'Benders': 'Benders',
 }
 
 # Plotting order, and the colour each series has always been drawn in.
@@ -61,6 +62,7 @@ SERIES_COLORS = {
     'Random-Greedy': '#ffcc00',
     'LP-Round-Repair': '#8e44ad',
     'Lagrangian-Feasible': '#16a085',
+    'Benders': '#a65d2a',
 }
 
 BAR_WIDTH = 0.25
